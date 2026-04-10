@@ -1,0 +1,2 @@
+2026-01-04 20:59:34.239238: I want you to stay on listening mode until you are given a command stay on listening and indefinitely until you are given
+2026-01-04 21:00:10.613914: I want you to stay on listening mode indefinitely until

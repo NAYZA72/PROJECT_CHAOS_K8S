@@ -1,0 +1,31 @@
+# C.H.A.O.S. - Command Handling AI Operating System
+# Install all dependencies: pip install -r requirements.txt
+
+# ===== Core =====
+pyttsx3              # Backup TTS engine (Windows SAPI5)
+edge-tts             # Primary TTS - Microsoft Neural Voices
+SpeechRecognition    # Speech-to-text (Google API)
+pygame               # Audio playback for generated speech
+pyaudio              # Microphone input & interrupt detection
+
+# ===== GUI Automation =====
+pyautogui            # Mouse/keyboard control, screenshots
+pygetwindow          # Window management (focus, list)
+Pillow               # Image processing
+
+# ===== System =====
+psutil               # CPU, RAM, battery monitoring
+pycaw                # Windows volume control
+comtypes             # COM interface (required by pycaw)
+pystray              # System tray icon (launcher)
+
+# ===== AI & Networking =====
+requests             # HTTP client (Ollama API)
+
+# ===== Gesture Control =====
+mediapipe            # Hand tracking (21 landmarks)
+opencv-python        # Webcam capture & display
+numpy                # Coordinate math & smoothing
+
+# ===== Optional =====
+# speedtest-cli      # Internet speed testing (uncomment if needed)
