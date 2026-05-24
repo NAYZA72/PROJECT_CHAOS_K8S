@@ -1,3 +1,8 @@
+import time
+import pyautogui
+import pygetwindow as gw
+
+
 def extract_feature_request(query):
     """Extract the actual feature request from the command"""
     triggers = [

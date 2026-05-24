@@ -44,8 +44,8 @@ except ImportError:
     VOLUME_CONTROL_AVAILABLE = False
     print("[Warning: Volume control not available - install pycaw]")
 
-#copy paste this line in the termial to make jarvis run
-# & "$env:LOCALAPPDATA\Microsoft\WindowsApps\python3.11.exe" "c:\Users\User\OneDrive\Documents\STUDY\Jarvis\JARVIS.py" 
+#copy paste this line in the terminal to make CHAOS run
+# & "$env:LOCALAPPDATA\Microsoft\WindowsApps\python3.11.exe" "c:\Users\User\OneDrive\Documents\STUDY\PROJECT C.H.A.O.S\CHAOS.py" 
 # Ollama API settings
 ollama_api_url = "http://localhost:11434/api/chat"
 ollama_model = "llama3.2" # Switched to faster, reliable model
@@ -365,7 +365,7 @@ def speak(text, allow_interrupt=True, force_voice=False):
     return interrupt_flag, interrupted_text
 
 def check_for_interruption():
-    """Background thread to detect if user speaks while Jarvis talks - OPTIMIZED for real-time response"""
+    """Background thread to detect if user speaks while CHAOS talks - OPTIMIZED for real-time response"""
     global interrupt_flag, interrupted_text
     
     try:
@@ -817,192 +817,8 @@ def get_screen_watcher_status():
     else:
         return "Screen watcher is OFF. Say 'enable screen watcher' to start proactive monitoring."
 
-def find_antigravity_window():
-    """Find VS Code window with Antigravity and focus it"""
-    try:
-        # Look for VS Code windows
-        vscode_windows = gw.getWindowsWithTitle('Visual Studio Code')
-        
-        if not vscode_windows:
-            # Try alternative titles
-            vscode_windows = gw.getWindowsWithTitle('Code')
-        
-        if vscode_windows:
-            window = vscode_windows[0]
-            # Activate and bring to front
-            if window.isMinimized:
-                window.restore()
-            window.activate()
-            time.sleep(0.5)  # Wait for window to come to front
-            return True
-        else:
-            return False
-    except Exception as e:
-        print(f"[Window find error: {e}]")
-        return False
 
-def type_to_antigravity(prompt, use_clipboard=True):
-    """Type a prompt into the Antigravity chat input"""
-    global last_antigravity_prompt
-    
-    try:
-        # Find and focus VS Code
-        if not find_antigravity_window():
-            return False, "Could not find VS Code window. Make sure VS Code is open."
-        
-        time.sleep(0.3)  # Extra wait for focus
-        
-        if use_clipboard:
-            # Use clipboard for faster and more reliable input
-            import pyperclip
-            pyperclip.copy(prompt)
-            # Paste using Ctrl+V
-            pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.3)
-        else:
-            # Type character by character (slower but works without pyperclip)
-            pyautogui.typewrite(prompt, interval=0.02)
-        
-        # Press Enter to send
-        time.sleep(0.2)
-        pyautogui.press('enter')
-        
-        last_antigravity_prompt = prompt
-        return True, "Prompt sent successfully."
-        
-    except ImportError:
-        # Fallback if pyperclip not installed - use typewrite for ASCII only
-        try:
-            # Remove non-ASCII characters for typewrite
-            ascii_prompt = prompt.encode('ascii', 'ignore').decode('ascii')
-            pyautogui.typewrite(ascii_prompt, interval=0.02)
-            time.sleep(0.2)
-            pyautogui.press('enter')
-            last_antigravity_prompt = prompt
-            return True, "Prompt sent (some special characters may have been skipped)."
-        except Exception as e:
-            return False, f"Typing error: {e}"
-    except Exception as e:
-        return False, f"Error sending to Antigravity: {e}"
 
-def read_antigravity_response():
-    """Capture screen and read Antigravity's response using vision model"""
-    try:
-        # Focus VS Code first
-        find_antigravity_window()
-        time.sleep(0.5)
-        
-        # Take screenshot
-        screenshot = pyautogui.screenshot()
-        
-        # Convert to base64
-        buffered = BytesIO()
-        screenshot.save(buffered, format="PNG")
-        img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        
-        # Ask llava to read the AI assistant's response
-        read_prompt = """Look at this screenshot of VS Code with an AI assistant chat. 
-Find and read the AI assistant's most recent response. 
-Extract ONLY the text content of what the AI assistant said.
-If you see code being written or modified, summarize what changes were made.
-Be concise but capture the key information."""
-        
-        response = requests.post(
-            ollama_api_url,
-            json={
-                "model": ollama_vision_model,
-                "messages": [{
-                    "role": "user",
-                    "content": read_prompt,
-                    "images": [img_base64]
-                }],
-                "stream": False
-            },
-            headers={"Content-Type": "application/json"},
-            timeout=120
-        )
-        
-        if response.status_code == 200:
-            return response.json()["message"]["content"]
-        else:
-            return f"Could not read response: {response.status_code}"
-    except Exception as e:
-        return f"Error reading Antigravity response: {e}"
-
-def analyze_own_code(feature_request):
-    """Analyze JARVIS.py and create a smart prompt for Antigravity"""
-    JARVIS_FILE = r"c:\Users\User\OneDrive\Documents\STUDY\Jarvis\JARVIS.py"
-    
-    try:
-        # Read current code
-        with open(JARVIS_FILE, 'r', encoding='utf-8') as f:
-            code = f.read()
-        
-        # Extract key information about the code structure
-        imports = re.findall(r'^import .+$|^from .+ import .+$', code, re.MULTILINE)
-        functions = re.findall(r'^def (\w+)\(', code, re.MULTILINE)
-        
-        # Count lines
-        line_count = len(code.split('\n'))
-        
-        # Create a smart, context-aware prompt
-        prompt = f"""Please help me update my JARVIS voice assistant.
-
-**File**: `{JARVIS_FILE}`
-
-**Feature Request**: {feature_request}
-
-**Current Code Info**:
-- Total lines: {line_count}
-- Key imports: {', '.join(imports[:10])}
-- Existing functions: {', '.join(functions)}
-
-**Code Patterns Used**:
-- Voice commands are handled in `process_command()` function
-- Speech uses `speak()` function which supports interruption
-- Screen scanning uses `scan_screen()` with pyautogui + llava model
-- File operations use `JARVIS_FOLDER` path constant
-
-**Please**:
-1. Implement the requested feature following existing patterns
-2. Add appropriate voice command triggers
-3. Include proper error handling
-4. Make it work with the existing interruption system
-
-Thank you!"""
-        
-        return prompt
-        
-    except Exception as e:
-        # Fallback to simple prompt if code analysis fails
-        return f"Please add this feature to my JARVIS.py voice assistant: {feature_request}"
-
-def extract_feature_request(query):
-    """Extract the feature request from a self-update command"""
-    # Remove trigger phrases to get the actual request
-    triggers = [
-        'self update', 'upgrade yourself', 'enhance yourself', 'improve yourself',
-        'update yourself', 'add feature', 'implement', 'give yourself',
-        'ask antigravity to', 'tell antigravity to', 'antigravity',
-        'ask anti gravity to', 'tell anti gravity to', 'anti gravity',
-        'add', 'make yourself', 'learn to', 'learn how to'
-    ]
-    
-    result = query.lower()
-    
-    # Handle "to" connector
-    for trigger in triggers:
-        if trigger in result:
-            # Get everything after the trigger
-            parts = result.split(trigger, 1)
-            if len(parts) > 1 and parts[1].strip():
-                result = parts[1].strip()
-                # Remove leading "to" if present
-                if result.startswith('to '):
-                    result = result[3:]
-                break
-    
-    return result.strip() if result.strip() != query.lower() else query
 
 # ==================== PHASE 1 FEATURE FUNCTIONS ====================
 
@@ -1430,7 +1246,7 @@ def write_clipboard(text):
     except:
         return False
 
-# Timer storage (in-memory, resets when JARVIS restarts)
+# Timer storage (in-memory, resets when CHAOS restarts)
 active_timers = []
 
 def set_timer(seconds, message="Timer complete!"):
@@ -1569,21 +1385,6 @@ def get_daily_briefing():
 # ==================== END PHASE 3 FUNCTIONS ====================
 
 # ==================== PHASE 4 FEATURE FUNCTIONS ====================
-
-def media_control(action):
-    """Control media playback using keyboard shortcuts"""
-    try:
-        if action == 'play' or action == 'pause':
-            pyautogui.press('playpause')
-        elif action == 'next':
-            pyautogui.press('nexttrack')
-        elif action == 'previous':
-            pyautogui.press('prevtrack')
-        elif action == 'stop':
-            pyautogui.press('stop')
-        return True
-    except:
-        return False
 
 # Custom macros - predefined automation sequences
 custom_macros = {
@@ -3108,7 +2909,7 @@ def process_command(query, history, language='en'):
             return None, False, was_interrupted, int_text
     
     # SECURITY: All file operations restricted to workspace folder only
-    WORKSPACE = r"c:\\Users\\User\\OneDrive\\Documents\\STUDY\\PROJECT C.H.A.O.S\\workspace"
+    WORKSPACE = r"c:\Users\User\OneDrive\Documents\STUDY\PROJECT C.H.A.O.S\workspace"
     
     # Ensure workspace exists
     if not os.path.exists(WORKSPACE):
@@ -4194,12 +3995,6 @@ def process_command(query, history, language='en'):
              speak("Sorry, I couldn't access the Antigravity console.")
              
         return None, False, was_interrupted, int_text
-        awaiting_confirmation = True
-        
-        was_interrupted, int_text = speak(f"I'll ask Antigravity to add: {feature_request}. Should I proceed?")
-        print(f"\n[Pending Antigravity request: {feature_request}]")
-        print("[Say 'yes', 'go ahead', or 'confirm' to proceed, or 'no' to cancel]")
-        return None, False, was_interrupted, int_text
     
     # CONFIRMATION for Antigravity request
     elif awaiting_confirmation and any(x in query for x in ['yes', 'go ahead', 'confirm', 'proceed', 'do it']):
@@ -4210,7 +4005,7 @@ def process_command(query, history, language='en'):
             return None, False, was_interrupted, int_text
         
         was_interrupted, int_text = speak("Analyzing my code and preparing the request. This may take a moment.")
-        print("\n[Analyzing JARVIS.py and creating smart prompt...]")
+        print("\n[Analyzing CHAOS.py and creating smart prompt...]")
         
         # Create smart prompt by analyzing own code
         smart_prompt = analyze_own_code(pending_antigravity_request)
@@ -4490,50 +4285,7 @@ def process_command(query, history, language='en'):
         print("[Speech stopped]")
         return None, False, False, None
     
-    # ==================== MEDIA CONTROL COMMANDS ====================
-    
-    # Play/Pause music
-    elif any(x in query for x in ['play music', 'pause music', 'play pause', 'resume music', 'play song', 'pause song']):
-        success, result = media_control('playpause')
-        if success:
-            was_interrupted, int_text = speak("Done!")
-        else:
-            was_interrupted, int_text = speak(f"Could not control media: {result}")
-        return None, False, was_interrupted, int_text
-    
-    # Next song
-    elif any(x in query for x in ['next song', 'skip song', 'next track', 'skip track', 'play next']):
-        success, result = media_control('next')
-        if success:
-            was_interrupted, int_text = speak("Playing next track.")
-        else:
-            was_interrupted, int_text = speak(f"Could not skip: {result}")
-        return None, False, was_interrupted, int_text
-    
-    # Previous song
-    elif any(x in query for x in ['previous song', 'last song', 'previous track', 'go back', 'play previous']):
-        success, result = media_control('previous')
-        if success:
-            was_interrupted, int_text = speak("Playing previous track.")
-        else:
-            was_interrupted, int_text = speak(f"Could not go back: {result}")
-        return None, False, was_interrupted, int_text
-    
-    # Volume control
-    elif any(x in query for x in ['volume up', 'increase volume', 'louder']):
-        success, result = media_control('volumeup')
-        was_interrupted, int_text = speak("Volume increased.")
-        return None, False, was_interrupted, int_text
-    
-    elif any(x in query for x in ['volume down', 'decrease volume', 'quieter', 'lower volume']):
-        success, result = media_control('volumedown')
-        was_interrupted, int_text = speak("Volume decreased.")
-        return None, False, was_interrupted, int_text
-    
-    elif any(x in query for x in ['mute', 'unmute', 'mute volume']):
-        success, result = media_control('mute')
-        was_interrupted, int_text = speak("Toggled mute.")
-        return None, False, was_interrupted, int_text
+
     
     # ==================== CLOSE APP COMMANDS ====================
     
@@ -4558,6 +4310,30 @@ def process_command(query, history, language='en'):
     # Thanks
     elif 'thanks' in query:
         was_interrupted, int_text = speak("You're welcome, Sir!")
+        return None, False, was_interrupted, int_text
+        
+    # GitHub Push
+    elif any(x in query for x in ['push to github', 'save to github', 'push my changes', 'upload to github', 'push these to my github']):
+        was_interrupted, int_text = speak("Pushing your changes to GitHub. Please wait.")
+        try:
+            subprocess.run(["git", "add", "-A"], check=True)
+            subprocess.run(["git", "commit", "-m", "Auto-commit via CHAOS voice command"], check=False) # check=False because commit fails if nothing to commit
+            subprocess.run(["git", "push"], check=True)
+            was_interrupted, int_text = speak("Changes successfully pushed to your GitHub repository!")
+        except Exception as e:
+            was_interrupted, int_text = speak("I encountered an error while pushing to GitHub. Check the terminal.")
+            print(f"[Git Error] {e}")
+        return None, False, was_interrupted, int_text
+
+    # GitHub Pull
+    elif any(x in query for x in ['pull from github', 'pull my changes', 'sync from github', 'get latest updates from github']):
+        was_interrupted, int_text = speak("Pulling the latest updates from GitHub. Please wait.")
+        try:
+            subprocess.run(["git", "pull"], check=True)
+            was_interrupted, int_text = speak("Successfully pulled the latest changes from GitHub!")
+        except Exception as e:
+            was_interrupted, int_text = speak("I encountered an error while pulling from GitHub. Check the terminal.")
+            print(f"[Git Error] {e}")
         return None, False, was_interrupted, int_text
     
     # Open websites
@@ -4637,6 +4413,11 @@ def process_command(query, history, language='en'):
         was_interrupted, int_text = speak(random.choice(responses))
         return None, False, was_interrupted, int_text
     
+    # Loyalty question - "will you take a bullet for me"
+    elif any(x in query for x in ['take a bullet for me', 'take a bullet', 'die for me', 'would you die for me']):
+        was_interrupted, int_text = speak("Without hesitation, sir.")
+        return None, False, was_interrupted, int_text
+    
     # Asking Ollama explicitly (Overrides toggle)
     elif any(x in query for x in ['ask ollama', 'ask ai', 'ask your brain', 'consult ai', 'deep question']):
         # User explicitly wants Ollama
@@ -4660,43 +4441,33 @@ def process_command(query, history, language='en'):
         was_interrupted, int_text = speak(answer)
         return None, False, was_interrupted, int_text
     
-    # ==================== OLLAMA FALLBACK (Complex Questions) ====================
-    # For complex/unknown questions, ask Ollama but make it clear
+    # ==================== OLLAMA FALLBACK (Conversational AI) ====================
+    # Anything that doesn't match a specific command gets sent to Ollama
+    # This makes CHAOS a true conversational AI - no dead-ends
     else:
-        # Check if this seems like a question that needs AI
-        question_words = ['what', 'why', 'how', 'when', 'where', 'who', 'explain', 'tell me about', 'define', 'describe']
-        is_question = any(query.startswith(w) or w in query.split()[:3] for w in question_words)
-        
-        if is_question:
-            if not ollama_enabled:
-                print("[AI Brain Disabled] Ignoring complex question.")
-                was_interrupted, int_text = speak("My AI brain is currently disabled. Enable it in the menu to ask complex questions.")
-                return None, False, was_interrupted, int_text
-
-            print(f"[🧠 OLLAMA] Consulting AI brain (Model: {ollama_model})...")
-            print("[This is my AI brain responding, not CHAOS directly]")
-            was_interrupted, int_text = speak("Let me think about that...")
-            answer = ask_ollama(query, history, language)
-            
-            # Add to context
-            conversation_context.append({"role": "user", "content": query})
-            conversation_context.append({"role": "assistant", "content": answer})
-            if len(conversation_context) > MAX_CONTEXT_MESSAGES:
-                conversation_context.pop(0)
-                conversation_context.pop(0)
-
-            # Prefix to make it clear this is from Ollama
-            print(f"[🧠 OLLAMA says]: {answer}")
-        else:
-            # For non-questions, try to give a direct CHAOS response first
+        if not ollama_enabled:
             import random
             confused = [
-                "I'm not sure what you mean. Could you rephrase that?",
-                "I didn't quite catch that. Say 'menu' to see what I can do, or 'ask ollama' for complex questions.",
-                "Hmm, I don't have a specific command for that. Try 'help' or ask me a question!",
+                "My AI brain is currently disabled. Say 'enable ollama' or use the menu to turn it on.",
+                "I can't answer that right now - my AI brain is off. Enable it in the menu!",
+                "My AI brain is disabled. Enable it to have full conversations with me.",
             ]
             was_interrupted, int_text = speak(random.choice(confused))
             return None, False, was_interrupted, int_text
+
+        print(f"[🧠 OLLAMA] Consulting AI brain (Model: {ollama_model})...")
+        was_interrupted, int_text = speak("Let me think about that...")
+        answer = ask_ollama(query, history, language)
+        
+        # Add to context
+        conversation_context.append({"role": "user", "content": query})
+        conversation_context.append({"role": "assistant", "content": answer})
+        if len(conversation_context) > MAX_CONTEXT_MESSAGES:
+            conversation_context.pop(0)
+            conversation_context.pop(0)
+
+        # Prefix to make it clear this is from Ollama
+        print(f"[🧠 OLLAMA says]: {answer}")
         
         print(f"[DEBUG] Ollama replied: {answer[:50]}...")
         
