@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: ollama-pvc
-  namespace: assignment3
+  namespace: chaos
 spec:
   accessModes:
     - ReadWriteOnce
@@ -14,7 +14,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ollama
-  namespace: assignment3
+  namespace: chaos
   labels:
     app: ollama
 spec:
@@ -55,7 +55,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ollama-service
-  namespace: assignment3
+  namespace: chaos
 spec:
   type: ClusterIP
   selector:

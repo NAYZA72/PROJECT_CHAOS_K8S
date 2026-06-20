@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: chaos-app
-  namespace: assignment3
+  namespace: chaos
   labels:
     app: chaos-app
 spec:
@@ -37,7 +37,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: chaos-service
-  namespace: assignment3
+  namespace: chaos
 spec:
   type: NodePort
   selector:
