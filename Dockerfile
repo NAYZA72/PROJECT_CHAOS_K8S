@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     libasound2-dev \
     portaudio19-dev \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     espeak \
     python3-dev \
