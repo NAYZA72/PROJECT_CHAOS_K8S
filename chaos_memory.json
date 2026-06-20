@@ -1,0 +1,95 @@
+{
+  "sessions": [
+    {
+      "date": "2026-05-24",
+      "timestamp": "2026-05-24_173021",
+      "file": "sessions\\session_2026-05-24_173021.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-05-24",
+      "timestamp": "2026-05-24_173700",
+      "file": "sessions\\session_2026-05-24_173700.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-05-24",
+      "timestamp": "2026-05-24_173727",
+      "file": "sessions\\session_2026-05-24_173727.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-04",
+      "timestamp": "2026-06-04_200317",
+      "file": "sessions\\session_2026-06-04_200317.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-04",
+      "timestamp": "2026-06-04_202334",
+      "file": "sessions\\session_2026-06-04_202334.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-04",
+      "timestamp": "2026-06-04_221916",
+      "file": "sessions\\session_2026-06-04_221916.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-04",
+      "timestamp": "2026-06-04_225028",
+      "file": "sessions\\session_2026-06-04_225028.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-04",
+      "timestamp": "2026-06-04_232725",
+      "file": "sessions\\session_2026-06-04_232725.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-04",
+      "timestamp": "2026-06-04_233423",
+      "file": "sessions\\session_2026-06-04_233423.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-04",
+      "timestamp": "2026-06-04_234720",
+      "file": "sessions\\session_2026-06-04_234720.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-05",
+      "timestamp": "2026-06-05_000551",
+      "file": "sessions\\session_2026-06-05_000551.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-08",
+      "timestamp": "2026-06-08_180505",
+      "file": "sessions\\session_2026-06-08_180505.json",
+      "keywords": [],
+      "summary": "Active session started."
+    },
+    {
+      "date": "2026-06-21",
+      "timestamp": "2026-06-21_002055",
+      "file": "sessions\\session_2026-06-21_002055.json",
+      "keywords": [],
+      "summary": "Active session started."
+    }
+  ]
+}

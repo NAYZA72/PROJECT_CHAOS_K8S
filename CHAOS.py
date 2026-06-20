@@ -5,6 +5,12 @@ import webbrowser
 import requests
 import json
 import sys
+import codecs
+if sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+if sys.stderr.encoding.lower() != 'utf-8':
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 import threading
 import time
 import os
@@ -12,15 +18,255 @@ import tempfile
 import asyncio
 import edge_tts
 import pygame
-import pyautogui
-import pygetwindow as gw
+try:
+    import pyautogui
+except Exception:
+    class MockPyAutoGUI:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+    pyautogui = MockPyAutoGUI()
+try:
+    import pygetwindow as gw
+except Exception:
+    class MockGW:
+        @staticmethod
+        def getAllWindows():
+            return []
+    gw = MockGW()
 import base64
 import re
 import subprocess
 import ctypes
 from io import BytesIO
+import queue
+
+# Setup for Command Dispatcher
+COMMANDS_REGISTRY = []
+
+def register_command(triggers, priority=0):
+    def decorator(func):
+        COMMANDS_REGISTRY.append({
+            'triggers': [t.lower() for t in triggers],
+            'handler': func,
+            'priority': priority
+        })
+        return func
+    return decorator
+
+# Session & Memory management
+CRYPTOGRAPHY_AVAILABLE = False
+chaos_key = None
+active_session_file = None
+active_session_history = []
+
+try:
+    from cryptography.fernet import Fernet
+    CRYPTOGRAPHY_AVAILABLE = True
+except ImportError:
+    print("[Warning: cryptography package not available - conversations will not be encrypted]")
+
+MEMORY_INDEX_FILE = 'chaos_memory.json'
+
+def init_session_system():
+    global chaos_key, active_session_file, active_session_history
+    os.makedirs('sessions', exist_ok=True)
+    if CRYPTOGRAPHY_AVAILABLE:
+        key_path = '.chaos.key'
+        if os.path.exists(key_path):
+            try:
+                with open(key_path, 'rb') as f:
+                    chaos_key = f.read()
+            except Exception as e:
+                print(f"[Error loading encryption key: {e}]")
+        if not chaos_key:
+            try:
+                chaos_key = Fernet.generate_key()
+                with open(key_path, 'wb') as f:
+                    f.write(chaos_key)
+                try:
+                    import ctypes
+                    ctypes.windll.kernel32.SetFileAttributesW(key_path, 2)
+                except:
+                    pass
+                print("[Generated new symmetric encryption key]")
+            except Exception as e:
+                print(f"[Failed to create encryption key: {e}]")
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S')
+    active_session_file = os.path.join('sessions', f"session_{timestamp}.json")
+    active_session_history = []
+    save_session_history()
+    register_session_in_index(active_session_file, timestamp)
+
+def encrypt_data(data_str):
+    if CRYPTOGRAPHY_AVAILABLE and chaos_key:
+        try:
+            f = Fernet(chaos_key)
+            return f.encrypt(data_str.encode('utf-8'))
+        except Exception as e:
+            print(f"[Encryption error: {e}]")
+    return data_str.encode('utf-8')
+
+def decrypt_data(encrypted_bytes):
+    if CRYPTOGRAPHY_AVAILABLE and chaos_key:
+        try:
+            f = Fernet(chaos_key)
+            return f.decrypt(encrypted_bytes).decode('utf-8')
+        except Exception as e:
+            print(f"[Decryption error: {e}]")
+    return encrypted_bytes.decode('utf-8')
+
+def save_session_history():
+    global active_session_history, active_session_file
+    if not active_session_file:
+        return
+    try:
+        serialized = json.dumps(active_session_history, indent=2)
+        encrypted = encrypt_data(serialized)
+        with open(active_session_file, 'wb') as f:
+            f.write(encrypted)
+    except Exception as e:
+        print(f"[Error saving session history: {e}]")
+
+def load_session_history(file_path):
+    if not os.path.exists(file_path):
+        return []
+    try:
+        with open(file_path, 'rb') as f:
+            encrypted = f.read()
+        decrypted = decrypt_data(encrypted)
+        return json.loads(decrypted)
+    except Exception as e:
+        print(f"[Error loading session {file_path}: {e}]")
+        try:
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        except:
+            return []
+
+def register_session_in_index(file_path, timestamp):
+    try:
+        index_data = {"sessions": []}
+        if os.path.exists(MEMORY_INDEX_FILE):
+            with open(MEMORY_INDEX_FILE, 'r') as f:
+                try:
+                    index_data = json.load(f)
+                except:
+                    pass
+        exists = any(s['file'] == file_path for s in index_data.get('sessions', []))
+        if not exists:
+            date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+            index_data.setdefault('sessions', []).append({
+                "date": date_str,
+                "timestamp": timestamp,
+                "file": file_path,
+                "keywords": [],
+                "summary": "Active session started."
+            })
+            with open(MEMORY_INDEX_FILE, 'w') as f:
+                json.dump(index_data, f, indent=2)
+    except Exception as e:
+        print(f"[Error registering session in memory: {e}]")
+
+def summarize_session_on_exit():
+    global active_session_history, active_session_file
+    if not active_session_file or not active_session_history:
+        return
+    print("[🧠 C.H.A.O.S. Memory] Summarizing active session history...")
+    user_msgs = [m['content'] for m in active_session_history if m['role'] == 'user']
+    if not user_msgs:
+        return
+    conversation_summary_prompt = (
+        "You are C.H.A.O.S. summarize the following user prompts into a single brief sentence "
+        "describing the main topic of our conversation, and list 3-5 keywords. "
+        "Format your response strictly as JSON with keys 'summary' and 'keywords' (list of strings).\n"
+        f"User prompts: {json.dumps(user_msgs[:10])}"
+    )
+    try:
+        response = requests.post(
+            ollama_api_url,
+            json={
+                "model": ollama_model, 
+                "messages": [{"role": "user", "content": conversation_summary_prompt}], 
+                "stream": False,
+                "format": "json"
+            },
+            headers={"Content-Type": "application/json"},
+            timeout=15
+        )
+        if response.status_code == 200:
+            res_json = response.json()["message"]["content"]
+            parsed = json.loads(res_json)
+            summary = parsed.get("summary", "Conversational discussion.")
+            keywords = parsed.get("keywords", [])
+            if os.path.exists(MEMORY_INDEX_FILE):
+                with open(MEMORY_INDEX_FILE, 'r') as f:
+                    index_data = json.load(f)
+                for session in index_data.get('sessions', []):
+                    if session['file'] == active_session_file:
+                        session['summary'] = summary
+                        session['keywords'] = keywords
+                        break
+                with open(MEMORY_INDEX_FILE, 'w') as f:
+                    json.dump(index_data, f, indent=2)
+                print(f"[🧠 C.H.A.O.S. Memory] Session summarized: {summary}")
+    except Exception as e:
+        print(f"[Failed to summarize session: {e}]")
+
+# Audio Playback Thread and Sentence Queue (Streaming TTS)
+speech_queue = queue.Queue()
+playback_thread = None
+is_speaking_queue = False
+
+def start_playback_worker():
+    global playback_thread
+    playback_thread = threading.Thread(target=playback_worker, daemon=True)
+    playback_thread.start()
+
+def playback_worker():
+    global interrupt_flag, is_speaking_queue
+    while True:
+        try:
+            item = speech_queue.get()
+            if item is None:
+                break
+            temp_file, text = item
+            if interrupt_flag:
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+                speech_queue.task_done()
+                continue
+            try:
+                is_speaking_queue = True
+                notify_dashboard_speaking(True)
+                pygame.mixer.music.load(temp_file)
+                pygame.mixer.music.play()
+                while pygame.mixer.music.get_busy():
+                    if interrupt_flag:
+                        pygame.mixer.music.stop()
+                        break
+                    time.sleep(0.05)
+            except Exception as e:
+                print(f"[Queue playback error: {e}]")
+            pygame.mixer.music.unload()
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+            is_speaking_queue = False
+            notify_dashboard_speaking(False)
+            speech_queue.task_done()
+        except Exception as e:
+            print(f"[Playback worker error: {e}]")
+            time.sleep(0.1)
+
+# Dashboard notification placeholder (implemented later with FastAPI/WebSockets)
+def notify_dashboard_speaking(val):
+    pass
 
 # Gesture control module
+
 try:
     from gesture_control import (start_gesture_control, stop_gesture_control,
                                   is_gesture_active, add_custom_gesture,
@@ -47,18 +293,33 @@ except ImportError:
 #copy paste this line in the terminal to make CHAOS run
 # & "$env:LOCALAPPDATA\Microsoft\WindowsApps\python3.11.exe" "c:\Users\User\OneDrive\Documents\STUDY\PROJECT C.H.A.O.S\CHAOS.py" 
 # Ollama API settings
-ollama_api_url = "http://localhost:11434/api/chat"
+ollama_api_url = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/api/chat")
 ollama_model = "llama3.2" # Switched to faster, reliable model
 ollama_vision_model = "llava"  # Vision model for screen analysis
 
 # Initialize pygame mixer for audio playback
-pygame.mixer.init()
+try:
+    pygame.mixer.init()
+except Exception as e:
+    print(f"[Warning: Pygame mixer could not be initialized - running in headless/no-audio mode: {e}]")
 
 # Initialize pyttsx3 as backup
-engine = pyttsx3.init('sapi5')
-voices = engine.getProperty('voices')
-engine.setProperty('voice', voices[0].id)
-engine.setProperty('rate', 175)
+engine = None
+try:
+    engine = pyttsx3.init('sapi5')
+    voices = engine.getProperty('voices')
+    engine.setProperty('voice', voices[0].id)
+    engine.setProperty('rate', 175)
+except Exception as e:
+    print(f"[Warning: pyttsx3 SAPI5 could not be initialized - trying default: {e}]")
+    try:
+        engine = pyttsx3.init()
+        voices = engine.getProperty('voices')
+        if voices:
+            engine.setProperty('voice', voices[0].id)
+        engine.setProperty('rate', 175)
+    except Exception as ex:
+        print(f"[Warning: pyttsx3 fallback failed: {ex}]")
 
 # Edge TTS voice settings - Expanded with natural-sounding voices
 VOICE_MAP = {
@@ -584,55 +845,297 @@ def warmup_ollama():
         return False
 
 def ask_ollama(query, history, language='en'):
-    global conversation_context
+    global conversation_context, current_voice, interrupt_flag, active_session_history
     
     # Choose system prompt based on detected language
     system_prompt = SYSTEM_PROMPT_URDU if language in ['ur', 'hi'] else SYSTEM_PROMPT_ENGLISH
     
     # Prepare messages for API call
     messages = []
-    
-    # 1. System Prompt
     messages.append({"role": "system", "content": system_prompt})
     
-    # 2. Add recent conversation context (for follow-ups)
     if conversation_context:
-        # Add last N messages from context list
         messages.extend(conversation_context[-MAX_CONTEXT_MESSAGES:])
     
-    # 3. Add current query
     messages.append({"role": "user", "content": query})
     
-    # Also update persistent history for file storage (optional, mostly for debugging/logging)
+    # Update histories
     if history and history[0].get('role') == 'system':
         history[0]['content'] = system_prompt
     else:
         history.insert(0, {"role": "system", "content": system_prompt})
     history.append({"role": "user", "content": query})
     
+    # Also log to our encrypted active session history
+    active_session_history.append({"role": "user", "content": query})
+    save_session_history()
+    broadcast_message_to_dashboard("user", query)
+    
+    # Clear speech queue and reset interrupt flag
+    while not speech_queue.empty():
+        try:
+            temp_file, _ = speech_queue.get_nowait()
+            try: os.remove(temp_file)
+            except: pass
+            speech_queue.task_done()
+        except:
+            break
+            
+    interrupt_flag = False
+    
+    # Start the "Verbal Nudge" filler timer thread
+    has_tokens_event = threading.Event()
+    nudge_thread = threading.Thread(target=verbal_nudge_timer, args=(has_tokens_event, language), daemon=True)
+    nudge_thread.start()
+    
+    full_response = ""
+    sentence_buffer = ""
+    
     try:
-        # print(f"[DEBUG] Connecting to Ollama at {ollama_api_url}...")
+        # Connect to Ollama with streaming enabled
         response = requests.post(
             ollama_api_url,
-            json={"model": ollama_model, "messages": messages, "stream": False},  # Use context-aware messages
+            json={"model": ollama_model, "messages": messages, "stream": True},
             headers={"Content-Type": "application/json"},
-            timeout=60 # Restored standard timeout for production
+            stream=True,
+            timeout=10  # Quicker connection timeout for seamless online fallback
         )
-        # print(f"[DEBUG] Ollama response status: {response.status_code}")
         
         if response.status_code == 200:
-            reply = response.json()["message"]["content"]
-            history.append({"role": "assistant", "content": reply})
+            for line in response.iter_lines():
+                if interrupt_flag:
+                    break
+                    
+                if line:
+                    # Cancel verbal nudge as soon as the first token arrives
+                    has_tokens_event.set()
+                    
+                    try:
+                        chunk = json.loads(line.decode('utf-8'))
+                        token = chunk["message"]["content"]
+                        full_response += token
+                        
+                        # Process sentences on the fly
+                        sentences, sentence_buffer = process_stream_chunk(token, sentence_buffer)
+                        for sentence in sentences:
+                            if sentence.strip() and not interrupt_flag:
+                                # Synthesize and queue the sentence TTS in a background thread
+                                threading.Thread(
+                                    target=synthesize_and_queue, 
+                                    args=(sentence, current_voice, language), 
+                                    daemon=True
+                                ).start()
+                    except Exception as e:
+                        print(f"[Error parsing stream chunk: {e}]")
+            
+            # Process any remaining text in the buffer at the end of the stream
+            if sentence_buffer.strip() and not interrupt_flag:
+                threading.Thread(
+                    target=synthesize_and_queue, 
+                    args=(sentence_buffer.strip(), current_voice, language), 
+                    daemon=True
+                ).start()
+                
+            # Log final response
+            history.append({"role": "assistant", "content": full_response})
+            active_session_history.append({"role": "assistant", "content": full_response})
+            save_session_history()
             save_history(history)
-            return reply
+            broadcast_message_to_dashboard("assistant", full_response)
+            return full_response
         else:
-            return f"Error: {response.status_code}"
-    except requests.exceptions.ConnectionError:
-        if language in ['ur', 'hi']:
-            return "Ollama chal nahi raha. Pehle Ollama start karo."
-        return "Ollama is not running. Please start Ollama first."
+            has_tokens_event.set()
+            # If Ollama returns non-200, attempt online fallback
+            raise requests.exceptions.ConnectionError("Local Ollama returned non-200, attempting online fallback.")
+            
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        # Cancel verbal nudge as we are handling it
+        has_tokens_event.set()
+        print("\n[⚠️ OLLAMA Offline] Seamlessly falling back to C.H.A.O.S. Online Brain...")
+        
+        # Attempt DuckDuckGo keyless AI chat
+        online_response = ask_duckduckgo_chat(query, system_prompt)
+        
+        if online_response:
+            full_response = online_response
+            print(f"[🌐 ONLINE Brain says]: {full_response}")
+            
+            # Queue the online response sentence-by-sentence
+            sentences = re.split(r'(?<=[.!?\n])\s+', full_response)
+            for sentence in sentences:
+                if sentence.strip() and not interrupt_flag:
+                    threading.Thread(
+                        target=synthesize_and_queue, 
+                        args=(sentence.strip(), current_voice, language), 
+                        daemon=True
+                    ).start()
+            
+            history.append({"role": "assistant", "content": full_response})
+            active_session_history.append({"role": "assistant", "content": full_response})
+            save_session_history()
+            save_history(history)
+            broadcast_message_to_dashboard("assistant", full_response)
+            return full_response
+        else:
+            # Offline / internet failed fallback - high quality offline rules
+            print("[⚠️ OFFLINE Mode] C.H.A.O.S. running in local sandbox mode.")
+            offline_reply = get_offline_fallback_reply(query, language)
+            
+            threading.Thread(
+                target=synthesize_and_queue, 
+                args=(offline_reply, current_voice, language), 
+                daemon=True
+            ).start()
+            
+            history.append({"role": "assistant", "content": offline_reply})
+            active_session_history.append({"role": "assistant", "content": offline_reply})
+            save_session_history()
+            save_history(history)
+            broadcast_message_to_dashboard("assistant", offline_reply)
+            return offline_reply
+            
     except Exception as e:
-        return f"Error: {e}"
+        has_tokens_event.set()
+        err_msg = f"Error: {e}"
+        broadcast_message_to_dashboard("assistant", err_msg)
+        return err_msg
+
+# Helper helpers for the optimized streaming Ask
+def process_stream_chunk(token, sentence_buffer):
+    sentence_buffer += token
+    sentences = []
+    
+    # We split by sentence boundaries followed by space/newline, or raw newlines
+    delimiters = ['. ', '? ', '! ', '\n']
+    
+    found_boundary = True
+    while found_boundary:
+        found_boundary = False
+        for d in delimiters:
+            if d in sentence_buffer:
+                parts = sentence_buffer.split(d, 1)
+                sentence = parts[0] + d.strip()
+                sentence_buffer = parts[1]
+                if sentence.strip():
+                    sentences.append(sentence.strip())
+                found_boundary = True
+                break
+    return sentences, sentence_buffer
+
+def synthesize_and_queue(text, voice, lang):
+    global interrupt_flag, voice_mode
+    if interrupt_flag or not voice_mode:
+        return
+    try:
+        # Standardize triggers so we don't speak tags [CMD:...]
+        clean_text = re.sub(r'\[CMD:[a-zA-Z0-9_]+\]', '', text).strip()
+        if not clean_text:
+            return
+            
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as f:
+            temp_file = f.name
+        
+        # Select voice based on language
+        if lang == 'hi':
+            use_voice = "hi-IN-MadhurNeural"
+        elif lang == 'ur':
+            use_voice = "ur-PK-AsadNeural"
+        else:
+            use_voice = voice
+            
+        asyncio.run(generate_speech_streaming(clean_text, use_voice, temp_file))
+        speech_queue.put((temp_file, clean_text))
+    except Exception as e:
+        print(f"[Async synthesis error: {e}]")
+
+def verbal_nudge_timer(has_tokens_event, lang):
+    time.sleep(1.8)  # Let it wait 1.8 seconds (generous floor)
+    if not has_tokens_event.is_set() and not interrupt_flag:
+        import random
+        if lang in ['ur', 'hi']:
+            fillers = ["Aik minute...", "Dekhte hain...", "Sochein...", "Hmm..."]
+        else:
+            fillers = ["Hmm...", "Let's see...", "One second...", "Let me check...", "Looking into it..."]
+        filler = random.choice(fillers)
+        # Speak filler immediately
+        speak(filler, allow_interrupt=True, force_voice=True)
+
+def ask_duckduckgo_chat(query, system_prompt):
+    try:
+        import requests
+        # Get VQD token
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "x-mq-id": "1",
+        }
+        status_res = requests.get("https://duckduckgo.com/duckchat/v1/status", headers=headers, timeout=10)
+        if status_res.status_code != 200:
+            return None
+        vqd = status_res.headers.get("x-vqd-4")
+        if not vqd:
+            return None
+            
+        # Send message
+        chat_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "x-vqd-4": vqd,
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": f"System Instruction: {system_prompt}\n\nUser Question: {query}"}
+            ]
+        }
+        
+        chat_res = requests.post("https://duckduckgo.com/duckchat/v1/chat", headers=chat_headers, json=payload, timeout=15)
+        if chat_res.status_code == 200:
+            full_text = ""
+            for line in chat_res.iter_lines():
+                line_str = line.decode('utf-8')
+                if line_str.startswith("data:"):
+                    data_content = line_str.replace("data:", "").strip()
+                    if data_content == "[DONE]":
+                        break
+                    try:
+                        data_json = json.loads(data_content)
+                        token = data_json.get("message", "")
+                        if token:
+                            full_text += token
+                       # Check for commands in text
+                    except:
+                        pass
+            if full_text.strip():
+                return full_text.strip()
+    except Exception as e:
+        print(f"[Online fallback error: {e}]")
+    return None
+
+def get_offline_fallback_reply(query, language):
+    import random
+    query_clean = query.lower()
+    if language in ['ur', 'hi']:
+        if any(x in query_clean for x in ['hello', 'slam', 'salam', 'hey', 'hi']):
+            return "Walaikum Assalam! Main offline mode mein hun, lekin aapki madad kar sakta hun. Koi command boliye."
+        elif any(x in query_clean for x in ['kaise', 'theek']):
+            return "Main bilkul theek hun, shukriya! Aap batayein, main aapki kya madad kar sakta hun?"
+        else:
+            return "Ollama aur internet dono band hain. Lekin aap mujhe PC control karne ke liye standard commands de sakte hain."
+    else:
+        if any(x in query_clean for x in ['hello', 'hey', 'hi', 'whats up', "what's up"]):
+            return "Hey there! I'm currently running in offline mode, but ready for your commands."
+        elif any(x in query_clean for x in ['how are you', 'how is it going']):
+            return "I'm doing great, thank you! Ready to orchestrate your system."
+        elif any(x in query_clean for x in ['who are you', 'your name']):
+            return "I am C.H.A.O.S., your Command Handling AI Operating System."
+        else:
+            return "Ollama is currently offline and I couldn't reach the online fallback. You can still use my system and productivity commands."
+
+# Dashboard notification placeholders (overwritten during FastAPI setup)
+def broadcast_message_to_dashboard(role, content):
+    pass
+
 
 def scan_screen(prompt="Describe what you see on this screen in detail."):
     """Take a screenshot and analyze it using Ollama's vision model (llava)"""
@@ -2889,6 +3392,222 @@ def find_antigravity_window():
     except:
         return False
 
+# Decorated Command Handlers for Dispatcher
+@register_command(['deactivate', 'sleep mode', 'standby', 'go to sleep'], priority=100)
+def handle_deactivate(query, history, language):
+    global is_awake
+    is_awake = False
+    speak("Entering standby mode. Say 'CHAOS Activate' to wake me up.", allow_interrupt=False)
+    print("\n[STANDBY MODE - Listening for 'CHAOS Activate']")
+    return None, False, False, None
+
+@register_command(['shutdown system', 'exit program', 'terminate'], priority=100)
+def handle_exit(query, history, language):
+    speak("Shutting down completely. Goodbye, Sir.", allow_interrupt=False)
+    try:
+        summarize_session_on_exit()
+    except Exception as e:
+        print(f"[Error summarizing on exit: {e}]")
+    return None, True, False, None
+
+@register_command(['scan screen', 'scan my screen', 'what do you see', 'analyze screen', 'look at my screen', 'whats on my screen', "what's on my screen"], priority=90)
+def handle_scan_screen(query, history, language):
+    was_interrupted, int_text = speak("Scanning your screen, please wait...")
+    if was_interrupted:
+        return None, False, was_interrupted, int_text
+    
+    print("[Taking screenshot and analyzing...]")
+    custom_prompt = None
+    if 'and tell me' in query:
+        custom_prompt = query.split('and tell me')[-1].strip()
+    elif 'and explain' in query:
+        custom_prompt = "Explain " + query.split('and explain')[-1].strip()
+    
+    if custom_prompt:
+        description = scan_screen(custom_prompt)
+    else:
+        description = scan_screen()
+    
+    was_interrupted, int_text = speak(description)
+    return None, False, was_interrupted, int_text
+
+@register_command(['enable true sight', 'activate true sight', 'true sight on', 'true sight enable', 'start true sight'], priority=90)
+def handle_enable_true_sight(query, history, language):
+    start_screen_watcher()
+    was_interrupted, int_text = speak("True Sight activated. I can now see all. Errors cannot hide from me.")
+    return None, False, was_interrupted, int_text
+
+@register_command(['disable true sight', 'deactivate true sight', 'true sight off', 'true sight disable', 'stop true sight'], priority=90)
+def handle_disable_true_sight(query, history, language):
+    stop_screen_watcher()
+    was_interrupted, int_text = speak("True Sight deactivated. Returning to normal vision.")
+    return None, False, was_interrupted, int_text
+
+@register_command(['true sight status', 'is true sight on', 'is true sight active', 'true sight check'], priority=90)
+def handle_true_sight_status(query, history, language):
+    global screen_watcher_enabled
+    if screen_watcher_enabled:
+        was_interrupted, int_text = speak("True Sight is active. I am watching over your code.")
+    else:
+        was_interrupted, int_text = speak("True Sight is dormant. Say 'enable true sight' to awaken it.")
+    return None, False, was_interrupted, int_text
+
+@register_command(['add task', 'add a task', 'new task', 'create a task', 'create task'], priority=85)
+def cmd_add_task(query, history, language):
+    priority = "medium"
+    if "high priority" in query: priority = "high"
+    elif "low priority" in query: priority = "low"
+    
+    title = query
+    for trigger in ['add a high priority task to', 'add a low priority task to', 'add a medium priority task to', 'add task', 'add a task', 'new task', 'create a task', 'create task']:
+        if trigger in query:
+            title = query.split(trigger)[-1].strip()
+            if title.startswith('to '): title = title[3:].strip()
+            break
+            
+    if not title:
+        was_interrupted, int_text = speak("What task should I add?")
+        return None, False, was_interrupted, int_text
+        
+    tasks = load_tasks()
+    task = {
+        "id": int(time.time() * 1000),
+        "title": title,
+        "priority": priority,
+        "status": "todo",
+        "created": datetime.datetime.now().isoformat()
+    }
+    tasks.insert(0, task)
+    save_tasks(tasks)
+    was_interrupted, int_text = speak(f"I've added the {priority} priority task: {title}")
+    return None, False, was_interrupted, int_text
+
+@register_command(['take a note', 'take note', 'new note', 'create a note', 'create note', 'note that'], priority=85)
+def cmd_add_note(query, history, language):
+    content = query
+    for trigger in ['take a note that', 'take a note', 'take note that', 'take note', 'new note', 'create a note', 'create note', 'note that']:
+        if trigger in query:
+            content = query.split(trigger)[-1].strip()
+            break
+            
+    if not content:
+        was_interrupted, int_text = speak("What should I write down?")
+        return None, False, was_interrupted, int_text
+        
+    notes = load_notes()
+    note = {
+        "id": int(time.time() * 1000),
+        "title": content[:30] + "..." if len(content) > 30 else content,
+        "content": content,
+        "created": datetime.datetime.now().isoformat(),
+        "updated": datetime.datetime.now().isoformat()
+    }
+    notes.insert(0, note)
+    save_notes(notes)
+    was_interrupted, int_text = speak("Note saved.")
+    return None, False, was_interrupted, int_text
+
+@register_command(['set reminder', 'add reminder', 'remind me', 'set a reminder'], priority=85)
+def cmd_add_reminder(query, history, language):
+    content = query
+    for trigger in ['set a reminder to', 'set a reminder that', 'set a reminder', 'add reminder', 'add a reminder', 'remind me to', 'remind me that', 'remind me']:
+        if trigger in query:
+            content = query.split(trigger)[-1].strip()
+            break
+            
+    if not content:
+        was_interrupted, int_text = speak("What should I remind you about?")
+        return None, False, was_interrupted, int_text
+        
+    reminders = load_reminders()
+    rem = {
+        "id": int(time.time() * 1000),
+        "title": content,
+        "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+        "time": "12:00",
+        "completed": False
+    }
+    reminders.insert(0, rem)
+    save_reminders(reminders)
+    was_interrupted, int_text = speak(f"Reminder set for: {content}")
+    return None, False, was_interrupted, int_text
+
+@register_command(['save snippet', 'save to library', 'add to library', 'store in library'], priority=85)
+def cmd_add_library(query, history, language):
+    content = query
+    for trigger in ['save snippet of', 'save snippet', 'save to library', 'add to library', 'store in library']:
+        if trigger in query:
+            content = query.split(trigger)[-1].strip()
+            if content.startswith('that ') or content.startswith('to '):
+                content = content.split(' ', 1)[1]
+            break
+            
+    if not content:
+        was_interrupted, int_text = speak("What should I save to the library?")
+        return None, False, was_interrupted, int_text
+        
+    items = load_library()
+    item = {
+        "id": int(time.time() * 1000),
+        "title": "Voice Snippet",
+        "content": content,
+        "type": "snippet",
+        "tags": ["voice"],
+        "created": datetime.datetime.now().isoformat()
+    }
+    items.insert(0, item)
+    save_library(items)
+    was_interrupted, int_text = speak("Saved to your library.")
+    return None, False, was_interrupted, int_text
+
+@register_command(['deep research', 'research topic', 'research about', 'do research on'], priority=85)
+def cmd_deep_research(query, history, language):
+    topic = query
+    for trigger in ['do deep research on', 'deep research on', 'deep research', 'research topic', 'research about', 'do research on']:
+        if trigger in query:
+            topic = query.split(trigger)[-1].strip()
+            break
+            
+    if not topic:
+        was_interrupted, int_text = speak("What topic should I research?")
+        return None, False, was_interrupted, int_text
+        
+    was_interrupted, int_text = speak(f"Initiating deep research on {topic}. This may take a moment.")
+    if was_interrupted: return None, False, was_interrupted, int_text
+    
+    try:
+        research_prompt = [
+            {"role": "system", "content": "You are a deep research assistant. Provide thorough, well-structured analysis."},
+            {"role": "user", "content": f"Research and analyze in depth: {topic}"}
+        ]
+        response = requests.post(
+            ollama_api_url,
+            json={"model": ollama_model, "messages": research_prompt, "stream": False},
+            timeout=120
+        )
+        if response.status_code == 200:
+            result = response.json()
+            content = result.get("message", {}).get("content", "No response from model")
+            # Save it to notes
+            notes = load_notes()
+            note = {
+                "id": int(time.time() * 1000),
+                "title": f"Research: {topic}",
+                "content": content,
+                "created": datetime.datetime.now().isoformat(),
+                "updated": datetime.datetime.now().isoformat()
+            }
+            notes.insert(0, note)
+            save_notes(notes)
+            
+            was_interrupted, int_text = speak(f"I have completed the research on {topic} and saved the report to your notes.")
+            return None, False, was_interrupted, int_text
+    except Exception as e:
+        pass
+        
+    was_interrupted, int_text = speak("I encountered an issue connecting to the research module.")
+    return None, False, was_interrupted, int_text
+
 def process_command(query, history, language='en'):
     """Process a single command and return (response_text, should_exit, was_interrupted, interrupted_query)"""
     global voice_mode, current_language, urdu_mode, current_voice, awaiting_confirmation, pending_antigravity_request, last_context
@@ -2896,6 +3615,17 @@ def process_command(query, history, language='en'):
     
     # Set current language for TTS
     current_language = language
+    
+    # 1. Dispatcher Pattern Matcher
+    for cmd in sorted(COMMANDS_REGISTRY, key=lambda x: x.get('priority', 0), reverse=True):
+        if any(trigger in query for trigger in cmd['triggers']):
+            try:
+                result = cmd['handler'](query, history, language)
+                if result is not None:
+                    return result
+            except Exception as e:
+                print(f"[Dispatcher execution error on trigger {cmd['triggers'][0]}: {e}]")
+
     
     # Resolve "it" / "that" to last_context if applicable
     if last_context and any(x in query for x in ['open it', 'show it', 'view it', 'open that', 'show that']):
@@ -2925,17 +3655,17 @@ def process_command(query, history, language='en'):
         except:
             return False
     
-    # DEACTIVATE / SLEEP command
-    if any(x in query for x in ['deactivate', 'sleep mode', 'standby', 'go to sleep']):
+    # SLEEP / STANDBY command
+    if any(x in query for x in ['sleep mode', 'standby', 'go to sleep']):
         global is_awake
         is_awake = False
         speak("Entering standby mode. Say 'CHAOS Activate' to wake me up.", allow_interrupt=False)
         print("\n[STANDBY MODE - Listening for 'CHAOS Activate']")
         return None, False, False, None
         
-    # SHUTDOWN / EXIT command
-    elif any(x in query for x in ['shutdown system', 'exit program', 'terminate']):
-        speak("Shutting down completely. Goodbye, Sir.", allow_interrupt=False)
+    # DEACTIVATE / SHUTDOWN command - full clean shutdown
+    elif any(x in query for x in ['deactivate', 'shutdown system', 'exit program', 'terminate', 'chaos shutdown']):
+        speak("Deactivating all systems. Closing ports and shutting down. Goodbye, Sir.", allow_interrupt=False)
         return None, True, False, None
     
     # SCAN SCREEN command - analyze what's on screen
@@ -3539,7 +4269,8 @@ def process_command(query, history, language='en'):
         return None, False, was_interrupted, int_text
     
     # CALCULATOR command
-    elif any(x in query for x in ['calculate', 'what is', "what's", 'compute', 'math']):
+    elif any(x in query for x in ['calculate', 'compute', 'math']) or \
+         (any(x in query for x in ["what's", 'what is']) and (any(c.isdigit() or c in '+-*/=' for c in query) or any(op in query for op in ['plus', 'minus', 'times', 'divided', 'multiplied', 'add', 'subtract']))):
         # Extract math expression
         expr = query
         for prefix in ['calculate ', "what's ", 'what is ', 'compute ', 'math ']:
@@ -4427,7 +5158,7 @@ def process_command(query, history, language='en'):
             return None, False, was_interrupted, int_text
         
         print(f"[🧠 OLLAMA] Consulting AI brain about: {actual_query}")
-        was_interrupted, int_text = speak("Let me consult my AI brain...")
+        # Note: Background ask_ollama handles streaming speech queue automatically
         answer = ask_ollama(actual_query, history, language)
         print(f"[🧠 OLLAMA Response]: {answer[:100]}...")
         
@@ -4438,8 +5169,7 @@ def process_command(query, history, language='en'):
             conversation_context.pop(0)
             conversation_context.pop(0)
 
-        was_interrupted, int_text = speak(answer)
-        return None, False, was_interrupted, int_text
+        return None, False, interrupt_flag, interrupted_text
     
     # ==================== OLLAMA FALLBACK (Conversational AI) ====================
     # Anything that doesn't match a specific command gets sent to Ollama
@@ -4456,7 +5186,7 @@ def process_command(query, history, language='en'):
             return None, False, was_interrupted, int_text
 
         print(f"[🧠 OLLAMA] Consulting AI brain (Model: {ollama_model})...")
-        was_interrupted, int_text = speak("Let me think about that...")
+        # Note: ask_ollama streams sentences directly to speech queue for natural pacing
         answer = ask_ollama(query, history, language)
         
         # Add to context
@@ -4469,18 +5199,10 @@ def process_command(query, history, language='en'):
         # Prefix to make it clear this is from Ollama
         print(f"[🧠 OLLAMA says]: {answer}")
         
-        print(f"[DEBUG] Ollama replied: {answer[:50]}...")
-        
-
-        
         # Check for Command Injection [CMD:command_name]
         cmd_match = re.search(r'\[CMD:([a-zA-Z0-9_]+)\]', answer)
         if cmd_match:
             command = cmd_match.group(1)
-            # Remove command tag from spoken text
-            clean_answer = answer.replace(cmd_match.group(0), "").strip()
-            was_interrupted, int_text = speak(clean_answer)
-            
             print(f"[Injecting Command: {command}]")
             
             # Execute injected command
@@ -4495,9 +5217,6 @@ def process_command(query, history, language='en'):
             elif command == 'open_google':
                 webbrowser.open("google.com")
             elif command == 'system_info':
-                 # Recursive call to process system info triggers manually or just call function? 
-                 # Recursion is safest for full output logic, but careful of infinite loops.
-                 # Let's simple-call the logic:
                  info = get_system_info()
                  parts = [f"Battery: {info.get('battery')}%"]
                  if 'ram_used' in info: parts.append(f"RAM: {info['ram_used']}%")
@@ -4508,17 +5227,690 @@ def process_command(query, history, language='en'):
             elif command == 'scan_screen':
                  speak("Scanning screen...")
                  scan_screen()
-            elif command == 'antigravity':
-                 speak("What should I write to Antigravity?") 
-                 # This handles the case where Ollama triggered it but didn't pass arguments.
-                 # The 'extract_feature_request' logic usually handles the direct command.
-                 # This is a fallback if Ollama decides to use the token.
-                 pass 
-                 
+        return None, False, interrupt_flag, interrupted_text
+
+# ==================== FASTAPI DASHBOARD SERVER ====================
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+import psutil
+
+app = FastAPI(title="C.H.A.O.S. OS Dashboard")
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+active_connections = set()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    active_connections.add(websocket)
+    try:
+        # Sync initial toggles
+        await websocket.send_json({
+            "type": "toggles",
+            "voice_mode": voice_mode,
+            "ollama_enabled": ollama_enabled,
+            "screen_watcher_enabled": screen_watcher_enabled,
+            "gesture_control_enabled": gesture_control_enabled,
+            "current_voice": current_voice
+        })
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        active_connections.remove(websocket)
+    except Exception:
+        if websocket in active_connections:
+            active_connections.remove(websocket)
+
+def broadcast_to_dashboard(payload: dict):
+    import asyncio
+    async def send():
+        for conn in list(active_connections):
+            try:
+                await conn.send_json(payload)
+            except:
+                pass
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.run_coroutine_threadsafe(send(), loop)
         else:
-            was_interrupted, int_text = speak(answer)
-            
-        return None, False, was_interrupted, int_text
+            loop.run_until_complete(send())
+    except:
+        new_loop = asyncio.new_event_loop()
+        new_loop.run_until_complete(send())
+
+def overwrite_placeholders():
+    global broadcast_message_to_dashboard, notify_dashboard_speaking
+    
+    def broadcast_msg(role, content):
+        broadcast_to_dashboard({
+            "type": "message",
+            "role": role,
+            "content": content
+        })
+    broadcast_message_to_dashboard = broadcast_msg
+    
+    def notify_speaking(val):
+        broadcast_to_dashboard({
+            "type": "speaking",
+            "value": val
+        })
+    notify_dashboard_speaking = notify_speaking
+
+# Apply real broadcast triggers
+overwrite_placeholders()
+
+@app.get("/", response_class=HTMLResponse)
+async def get_dashboard():
+    template_path = os.path.join('templates', 'dashboard.html')
+    if os.path.exists(template_path):
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    return "<h3>Error: templates/dashboard.html not found!</h3>"
+
+@app.get("/assets/{filename}")
+async def serve_asset(filename: str):
+    """Serve static assets (images) from project root"""
+    allowed_files = {
+        'logo.png': 'C.H.A.O.S logo.png',
+        'chaos.jpg': 'chaos.jpg',
+        'chaos_icon.jpg': 'chaos_icon_new.jpg',
+    }
+    if filename in allowed_files:
+        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), allowed_files[filename])
+        if os.path.exists(file_path):
+            return FileResponse(file_path)
+    return HTMLResponse("Not found", status_code=404)
+
+@app.get("/api/settings")
+async def get_settings():
+    """Return current CHAOS settings"""
+    voice_names = {v: k for k, v in VOICE_MAP.items()}
+    return JSONResponse(content={
+        "ollama_model": ollama_model,
+        "ollama_api_url": ollama_api_url,
+        "ollama_vision_model": ollama_vision_model,
+        "current_voice": current_voice,
+        "current_voice_name": voice_names.get(current_voice, "custom"),
+        "voice_mode": voice_mode,
+        "ollama_enabled": ollama_enabled,
+        "screen_watcher_enabled": screen_watcher_enabled,
+        "gesture_control_enabled": gesture_control_enabled,
+        "urdu_mode": urdu_mode,
+        "type_input_mode": type_input_mode,
+        "available_voices": list(VOICE_MAP.keys()),
+        "version": "2.1"
+    })
+
+@app.post("/api/settings")
+async def update_settings(request: Request):
+    """Update CHAOS settings"""
+    global ollama_model, ollama_api_url, ollama_vision_model, current_voice, voice_mode, urdu_mode, type_input_mode
+    data = await request.json()
+    
+    if "ollama_model" in data:
+        ollama_model = data["ollama_model"]
+    if "ollama_api_url" in data:
+        ollama_api_url = data["ollama_api_url"]
+    if "ollama_vision_model" in data:
+        ollama_vision_model = data["ollama_vision_model"]
+    if "voice" in data and data["voice"] in VOICE_MAP:
+        current_voice = VOICE_MAP[data["voice"]]
+    if "voice_mode" in data:
+        voice_mode = data["voice_mode"]
+    if "urdu_mode" in data:
+        urdu_mode = data["urdu_mode"]
+    if "type_input_mode" in data:
+        type_input_mode = data["type_input_mode"]
+    
+    # Broadcast updated toggles
+    broadcast_to_dashboard({
+        "type": "toggles",
+        "voice_mode": voice_mode,
+        "ollama_enabled": ollama_enabled,
+        "screen_watcher_enabled": screen_watcher_enabled,
+        "gesture_control_enabled": gesture_control_enabled,
+        "current_voice": current_voice
+    })
+    return JSONResponse(content={"status": "success"})
+
+@app.post("/api/deactivate")
+async def api_deactivate():
+    """Trigger a clean shutdown of C.H.A.O.S. from the dashboard"""
+    import asyncio
+    # Broadcast shutdown event to all connected clients
+    for conn in list(active_connections):
+        try:
+            await conn.send_json({"type": "shutdown", "message": "C.H.A.O.S. is shutting down..."})
+            await conn.close()
+        except:
+            pass
+    active_connections.clear()
+    # Schedule the actual exit after responding
+    def delayed_exit():
+        time.sleep(1)
+        print("\n[DEACTIVATE] All connections closed. Ports released. Goodbye.")
+        os._exit(0)
+    threading.Thread(target=delayed_exit, daemon=True).start()
+    return JSONResponse(content={"status": "deactivating", "message": "C.H.A.O.S. shutting down..."})
+
+@app.get("/api/sessions")
+async def get_sessions():
+    if os.path.exists(MEMORY_INDEX_FILE):
+        try:
+            with open(MEMORY_INDEX_FILE, 'r') as f:
+                return JSONResponse(content=json.load(f))
+        except:
+            pass
+    return JSONResponse(content={"sessions": []})
+
+@app.get("/api/sessions/details")
+async def get_session_details(file: str):
+    if file.startswith('sessions') or file.startswith('sessions\\'):
+        history = load_session_history(file)
+        return JSONResponse(content=history)
+    return JSONResponse(content=[], status_code=400)
+
+@app.post("/api/toggles")
+async def post_toggles(request: Request):
+    global voice_mode, ollama_enabled, screen_watcher_enabled, gesture_control_enabled
+    data = await request.json()
+    toggle = data.get("toggle")
+    value = data.get("value")
+    
+    if toggle == "voice_mode":
+        voice_mode = value
+    elif toggle == "ollama_enabled":
+        ollama_enabled = value
+    elif toggle == "screen_watcher_enabled":
+        if value:
+            start_screen_watcher()
+        else:
+            stop_screen_watcher()
+    elif toggle == "gesture_control_enabled":
+        gesture_control_enabled = value
+        if value:
+            if GESTURE_CONTROL_AVAILABLE:
+                threading.Thread(target=start_gesture_control, daemon=True).start()
+        else:
+            if GESTURE_CONTROL_AVAILABLE:
+                stop_gesture_control()
+                
+    broadcast_to_dashboard({
+        "type": "toggles",
+        "voice_mode": voice_mode,
+        "ollama_enabled": ollama_enabled,
+        "screen_watcher_enabled": screen_watcher_enabled,
+        "gesture_control_enabled": gesture_control_enabled,
+        "current_voice": current_voice
+    })
+    return JSONResponse(content={"status": "success"})
+
+@app.post("/api/command")
+async def post_command(request: Request):
+    data = await request.json()
+    query = data.get("query")
+    if query:
+        def run_command_in_background():
+            history = load_history()
+            process_command(query, history, 'en')
+        threading.Thread(target=run_command_in_background, daemon=True).start()
+    return JSONResponse(content={"status": "received"})
+
+# ====== TIMELINE API ======
+timeline_events = []
+
+def log_timeline_event(event_type, title, description=""):
+    """Log an event to the timeline"""
+    timeline_events.append({
+        "id": len(timeline_events) + 1,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "type": event_type,
+        "title": title,
+        "description": description
+    })
+    # Keep last 200 events
+    if len(timeline_events) > 200:
+        timeline_events.pop(0)
+    # Broadcast to dashboard
+    broadcast_to_dashboard({"type": "timeline_event", "event": timeline_events[-1]})
+
+@app.get("/api/timeline")
+async def get_timeline():
+    """Return timeline events"""
+    # Seed with startup event if empty
+    if not timeline_events:
+        log_timeline_event("system", "C.H.A.O.S. Started", "Dashboard server initialized on port 8000")
+        log_timeline_event("system", "Ollama Status", f"Model: {ollama_model} | API: {ollama_api_url}")
+        log_timeline_event("system", "Voice Engine", f"Active voice: {current_voice}")
+        # Add session history as timeline events
+        if os.path.exists(MEMORY_INDEX_FILE):
+            try:
+                with open(MEMORY_INDEX_FILE, 'r') as f:
+                    idx = json.load(f)
+                    for s in idx.get("sessions", [])[-5:]:
+                        log_timeline_event("session", f"Session: {s.get('first_message','Unknown')[:50]}", f"Messages: {s.get('message_count',0)} | File: {s.get('file','')}")
+            except:
+                pass
+    return JSONResponse(content={"events": list(reversed(timeline_events))})
+
+# ====== REMINDERS API ======
+REMINDERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chaos_reminders.json")
+
+def load_reminders():
+    if os.path.exists(REMINDERS_FILE):
+        try:
+            with open(REMINDERS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+def save_reminders(reminders):
+    with open(REMINDERS_FILE, 'w') as f:
+        json.dump(reminders, f, indent=2)
+
+@app.get("/api/reminders")
+async def get_reminders():
+    return JSONResponse(content={"reminders": load_reminders()})
+
+@app.post("/api/reminders")
+async def add_reminder(request: Request):
+    data = await request.json()
+    reminders = load_reminders()
+    reminder = {
+        "id": int(time.time() * 1000),
+        "title": data.get("title", "Untitled"),
+        "description": data.get("description", ""),
+        "due": data.get("due", ""),
+        "status": "pending",
+        "created": datetime.datetime.now().isoformat()
+    }
+    reminders.append(reminder)
+    save_reminders(reminders)
+    log_timeline_event("command", "Reminder Added", f"'{reminder['title']}' due {reminder['due']}")
+    return JSONResponse(content={"status": "success", "reminder": reminder})
+
+@app.put("/api/reminders/{reminder_id}")
+async def update_reminder(reminder_id: int, request: Request):
+    data = await request.json()
+    reminders = load_reminders()
+    for r in reminders:
+        if r["id"] == reminder_id:
+            if "status" in data:
+                r["status"] = data["status"]
+            if "title" in data:
+                r["title"] = data["title"]
+            if "description" in data:
+                r["description"] = data["description"]
+            break
+    save_reminders(reminders)
+    return JSONResponse(content={"status": "success"})
+
+@app.delete("/api/reminders/{reminder_id}")
+async def delete_reminder(reminder_id: int):
+    reminders = load_reminders()
+    reminders = [r for r in reminders if r["id"] != reminder_id]
+    save_reminders(reminders)
+    return JSONResponse(content={"status": "success"})
+
+# ====== BENCHMARK API ======
+@app.get("/api/benchmark")
+async def run_benchmark():
+    """Run system diagnostics and return hardware benchmark results"""
+    import shutil
+    
+    # CPU info
+    cpu_count = psutil.cpu_count(logical=True)
+    cpu_physical = psutil.cpu_count(logical=False) or cpu_count
+    cpu_percent = psutil.cpu_percent(interval=0.5)
+    
+    # RAM info
+    ram = psutil.virtual_memory()
+    ram_total_gb = round(ram.total / (1024**3), 1)
+    ram_available_gb = round(ram.available / (1024**3), 1)
+    
+    # Disk info
+    disk = shutil.disk_usage(os.path.dirname(os.path.abspath(__file__)))
+    disk_free_gb = round(disk.free / (1024**3), 1)
+    disk_total_gb = round(disk.total / (1024**3), 1)
+    
+    # VRAM detection (try nvidia-smi)
+    vram_gb = 0
+    vram_status = "N/A"
+    try:
+        result = subprocess.run(['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            vram_mb = int(result.stdout.strip().split('\n')[0])
+            vram_gb = round(vram_mb / 1024, 1)
+            vram_status = "PASSED" if vram_gb >= 4 else "WARNING"
+    except:
+        vram_status = "N/A (No NVIDIA GPU detected)"
+    
+    # OS info
+    import platform
+    os_info = f"{platform.system()} {platform.release()} ({platform.architecture()[0]})"
+    
+    # Ollama status
+    ollama_running = False
+    try:
+        ollama_base = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        r = requests.get(f"{ollama_base}/api/tags", timeout=2)
+        ollama_running = r.status_code == 200
+    except:
+        pass
+    
+    return JSONResponse(content={
+        "cpu": {
+            "logical_cores": cpu_count,
+            "physical_cores": cpu_physical,
+            "usage_percent": cpu_percent,
+            "status": "OPTIMIZED" if cpu_count >= 8 else ("ADEQUATE" if cpu_count >= 4 else "WARNING")
+        },
+        "ram": {
+            "total_gb": ram_total_gb,
+            "available_gb": ram_available_gb,
+            "usage_percent": ram.percent,
+            "status": "VERIFIED" if ram_total_gb >= 16 else ("ADEQUATE" if ram_total_gb >= 8 else "WARNING")
+        },
+        "vram": {
+            "total_gb": vram_gb,
+            "status": vram_status
+        },
+        "storage": {
+            "free_gb": disk_free_gb,
+            "total_gb": disk_total_gb,
+            "status": "VALID" if disk_free_gb >= 20 else ("LOW" if disk_free_gb >= 10 else "CRITICAL")
+        },
+        "os": os_info,
+        "ollama": {
+            "running": ollama_running,
+            "model": ollama_model,
+            "api_url": ollama_api_url
+        },
+        "target_model": ollama_model.upper()
+    })
+
+# ====== PERMISSIONS API ======
+PERMISSIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chaos_permissions.json")
+
+def load_permissions():
+    if os.path.exists(PERMISSIONS_FILE):
+        try:
+            with open(PERMISSIONS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {
+        "workspace": r"c:\Users\User\OneDrive\Documents\STUDY\PROJECT C.H.A.O.S\workspace",
+        "privacy_redlines": True,
+        "exclusions": {
+            "ssh_keys": True,
+            "env_variables": True,
+            "local_credentials": True,
+            "browser_history": True,
+            "temp_system_files": True
+        },
+        "custom_regex": "",
+        "indexed_extensions": [".txt", ".md", ".py", ".js", ".json"]
+    }
+
+@app.get("/api/permissions")
+async def get_permissions():
+    return JSONResponse(content=load_permissions())
+
+@app.post("/api/permissions")
+async def update_permissions(request: Request):
+    data = await request.json()
+    with open(PERMISSIONS_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+    log_timeline_event("settings", "Permissions Updated", "Directory restrictions and privacy boundaries changed")
+    return JSONResponse(content={"status": "success"})
+
+# ====== NOTES API ======
+NOTES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chaos_notes.json")
+
+def load_notes():
+    if os.path.exists(NOTES_FILE):
+        try:
+            with open(NOTES_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+def save_notes(notes):
+    with open(NOTES_FILE, 'w') as f:
+        json.dump(notes, f, indent=2)
+
+@app.get("/api/notes")
+async def get_notes():
+    return JSONResponse(content={"notes": load_notes()})
+
+@app.post("/api/notes")
+async def add_note(request: Request):
+    data = await request.json()
+    notes = load_notes()
+    note = {
+        "id": int(time.time() * 1000),
+        "title": data.get("title", "Untitled"),
+        "content": data.get("content", ""),
+        "created": datetime.datetime.now().isoformat(),
+        "updated": datetime.datetime.now().isoformat()
+    }
+    notes.insert(0, note)
+    save_notes(notes)
+    log_timeline_event("command", "Note Created", f"'{note['title']}'")
+    return JSONResponse(content={"status": "success", "note": note})
+
+@app.put("/api/notes/{note_id}")
+async def update_note(note_id: int, request: Request):
+    data = await request.json()
+    notes = load_notes()
+    for n in notes:
+        if n["id"] == note_id:
+            if "title" in data: n["title"] = data["title"]
+            if "content" in data: n["content"] = data["content"]
+            n["updated"] = datetime.datetime.now().isoformat()
+            break
+    save_notes(notes)
+    return JSONResponse(content={"status": "success"})
+
+@app.delete("/api/notes/{note_id}")
+async def delete_note(note_id: int):
+    notes = load_notes()
+    notes = [n for n in notes if n["id"] != note_id]
+    save_notes(notes)
+    return JSONResponse(content={"status": "success"})
+
+# ====== TASKS API ======
+TASKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chaos_tasks.json")
+
+def load_tasks():
+    if os.path.exists(TASKS_FILE):
+        try:
+            with open(TASKS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+def save_tasks(tasks):
+    with open(TASKS_FILE, 'w') as f:
+        json.dump(tasks, f, indent=2)
+
+@app.get("/api/tasks")
+async def get_tasks():
+    return JSONResponse(content={"tasks": load_tasks()})
+
+@app.post("/api/tasks")
+async def add_task(request: Request):
+    data = await request.json()
+    tasks = load_tasks()
+    task = {
+        "id": int(time.time() * 1000),
+        "title": data.get("title", ""),
+        "priority": data.get("priority", "medium"),
+        "status": "todo",
+        "created": datetime.datetime.now().isoformat()
+    }
+    tasks.insert(0, task)
+    save_tasks(tasks)
+    log_timeline_event("command", "Task Added", f"'{task['title']}' [{task['priority']}]")
+    return JSONResponse(content={"status": "success", "task": task})
+
+@app.put("/api/tasks/{task_id}")
+async def update_task(task_id: int, request: Request):
+    data = await request.json()
+    tasks = load_tasks()
+    for t in tasks:
+        if t["id"] == task_id:
+            if "status" in data: t["status"] = data["status"]
+            if "title" in data: t["title"] = data["title"]
+            if "priority" in data: t["priority"] = data["priority"]
+            break
+    save_tasks(tasks)
+    return JSONResponse(content={"status": "success"})
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_task(task_id: int):
+    tasks = load_tasks()
+    tasks = [t for t in tasks if t["id"] != task_id]
+    save_tasks(tasks)
+    return JSONResponse(content={"status": "success"})
+
+# ====== LIBRARY API ======
+LIBRARY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chaos_library.json")
+
+def load_library():
+    if os.path.exists(LIBRARY_FILE):
+        try:
+            with open(LIBRARY_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+def save_library(items):
+    with open(LIBRARY_FILE, 'w') as f:
+        json.dump(items, f, indent=2)
+
+@app.get("/api/library")
+async def get_library():
+    return JSONResponse(content={"items": load_library()})
+
+@app.post("/api/library")
+async def add_library_item(request: Request):
+    data = await request.json()
+    items = load_library()
+    item = {
+        "id": int(time.time() * 1000),
+        "title": data.get("title", ""),
+        "content": data.get("content", ""),
+        "type": data.get("type", "snippet"),
+        "tags": data.get("tags", []),
+        "created": datetime.datetime.now().isoformat()
+    }
+    items.insert(0, item)
+    save_library(items)
+    log_timeline_event("command", "Library Item Saved", f"'{item['title']}' [{item['type']}]")
+    return JSONResponse(content={"status": "success", "item": item})
+
+@app.delete("/api/library/{item_id}")
+async def delete_library_item(item_id: int):
+    items = load_library()
+    items = [i for i in items if i["id"] != item_id]
+    save_library(items)
+    return JSONResponse(content={"status": "success"})
+
+# ====== DEEP RESEARCH API ======
+@app.post("/api/research")
+async def deep_research(request: Request):
+    data = await request.json()
+    query = data.get("query", "")
+    if not query:
+        return JSONResponse(content={"error": "No query provided"}, status_code=400)
+
+    log_timeline_event("command", "Deep Research", f"Query: {query[:60]}")
+
+    # Try Ollama with research system prompt
+    try:
+        research_prompt = [
+            {"role": "system", "content": "You are a deep research assistant. Provide thorough, well-structured analysis with multiple perspectives, evidence, and sources. Use headers, bullet points, and clear sections. Be comprehensive and detailed."},
+            {"role": "user", "content": f"Research and analyze in depth: {query}"}
+        ]
+        response = requests.post(
+            ollama_api_url,
+            json={"model": ollama_model, "messages": research_prompt, "stream": False},
+            timeout=120
+        )
+        if response.status_code == 200:
+            result = response.json()
+            content = result.get("message", {}).get("content", "No response from model")
+            return JSONResponse(content={"result": content, "model": ollama_model, "status": "success"})
+    except Exception as e:
+        pass
+
+    return JSONResponse(content={"result": f"Ollama is offline. Could not research: {query}\n\nPlease ensure Ollama is running with `ollama serve` and the {ollama_model} model is available.", "model": ollama_model, "status": "offline"})
+
+def telemetry_broadcaster():
+    while True:
+        try:
+            cpu = psutil.cpu_percent(interval=None)
+            ram = psutil.virtual_memory().percent
+            battery_pct = 100
+            plugged = True
+            try:
+                battery = psutil.sensors_battery()
+                if battery:
+                    battery_pct = battery.percent
+                    plugged = battery.power_plugged
+            except:
+                pass
+            battery_str = f"{battery_pct}% " + ("(AC Plugged)" if plugged else "(Battery Mode)")
+            broadcast_to_dashboard({
+                "type": "stats",
+                "cpu": cpu,
+                "ram": ram,
+                "battery": battery_str
+            })
+        except Exception as e:
+            print(f"[Telemetry broadcaster error: {e}]")
+        time.sleep(2.0)
+
+def find_available_port(start_port=8000, max_tries=10):
+    import socket
+    for port in range(start_port, start_port + max_tries):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('127.0.0.1', port))
+                return port
+        except OSError:
+            continue
+    return None
+
+def start_fastapi_server():
+    port = find_available_port(8000)
+    if not port:
+        print("[Dashboard Warning] Could not find any open ports. Dashboard is disabled.")
+        return
+        
+    threading.Thread(target=telemetry_broadcaster, daemon=True).start()
+    def run_uvicorn():
+        uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+    threading.Thread(target=run_uvicorn, daemon=True).start()
+    print(f"[Dashboard Server Online] URL: http://localhost:{port}")
 
 def main():
     global is_awake, type_input_mode
@@ -4554,6 +5946,11 @@ def main():
     
     # Preload AI model so first response is fast
     warmup_ollama()
+    
+    # Initialize the encrypted sessions, audio playback thread, and dashboard server
+    init_session_system()
+    start_playback_worker()
+    start_fastapi_server()
     
     history = load_history()
     time.sleep(1) # Wait for audio system to initialize
@@ -4613,10 +6010,34 @@ def main():
             continue # Ignore everything else while asleep
 
         # Process the command with detected language
+        try:
+            log_timeline_event("command", f"Command: {query[:60]}", f"Language: {lang} | Mode: {'type' if type_input_mode else 'voice'}")
+        except:
+            pass
         _, should_exit, was_interrupted, interrupted_query = process_command(query, history, lang)
         
         if should_exit:
-            sys.exit(0)
+            print("\n[DEACTIVATE] Closing all connections and releasing ports...")
+            # Close all WebSocket connections
+            import asyncio
+            async def close_all():
+                for conn in list(active_connections):
+                    try:
+                        await conn.send_json({"type": "shutdown", "message": "C.H.A.O.S. deactivated."})
+                        await conn.close()
+                    except:
+                        pass
+                active_connections.clear()
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.run_coroutine_threadsafe(close_all(), loop).result(timeout=3)
+                else:
+                    loop.run_until_complete(close_all())
+            except:
+                pass
+            print("[DEACTIVATE] All systems offline. Goodbye.")
+            os._exit(0)
         
         # If we were interrupted, use that as the next query
         if was_interrupted and interrupted_query:

@@ -29,3 +29,10 @@ numpy                # Coordinate math & smoothing
 
 # ===== Optional =====
 # speedtest-cli      # Internet speed testing (uncomment if needed)
+
+# ===== Core Upgrades =====
+cryptography         # Encrypted session files
+fastapi              # Lightweight dashboard API
+uvicorn              # ASGI server for FastAPI
+websockets           # Real-time UI communications
+
