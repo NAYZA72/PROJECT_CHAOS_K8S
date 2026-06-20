@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: chaos-app
-          image: <your-dockerhub-username>/chaos-app:latest
+          image: nayza72/chaos-app:latest
           ports:
             - containerPort: 8000
           env:
