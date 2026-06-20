@@ -1,6 +1,20 @@
 import time
-import pyautogui
-import pygetwindow as gw
+try:
+    import pyautogui
+except Exception:
+    class MockPyAutoGUI:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+    pyautogui = MockPyAutoGUI()
+
+try:
+    import pygetwindow as gw
+except Exception:
+    class MockGW:
+        @staticmethod
+        def getWindowsWithTitle(title):
+            return []
+    gw = MockGW()
 
 
 def extract_feature_request(query):

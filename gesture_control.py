@@ -10,7 +10,16 @@ Dependencies: mediapipe, opencv-python, numpy, pyautogui
 import cv2
 import mediapipe as mp
 import numpy as np
-import pyautogui
+try:
+    import pyautogui
+except Exception:
+    class MockPyAutoGUI:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+        @staticmethod
+        def size():
+            return 1920, 1080
+    pyautogui = MockPyAutoGUI()
 import json
 import os
 import time
