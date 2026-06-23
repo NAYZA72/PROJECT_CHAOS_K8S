@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: flask-config
-  namespace: assignment3
+  name: chaos-config
+  namespace: chaos
 data:
   db_host: "mysql"
   db_name: "flaskdb"

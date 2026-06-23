@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-api
-  namespace: assignment3
+  name: chaos-web
+  namespace: chaos
   labels:
-    app: flask-api
+    app: chaos-web
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: flask-api
+      app: chaos-web
   template:
     metadata:
       labels:
-        app: flask-api
+        app: chaos-web
     spec:
       containers:
-        - name: flask-api
+        - name: chaos-web
           image: nayza72/flask-api:latest
           ports:
             - containerPort: 5000
@@ -24,7 +24,7 @@ spec:
             - name: DB_HOST
               valueFrom:
                 configMapKeyRef:
-                  name: flask-config
+                  name: chaos-config
                   key: db_host
             - name: DB_USER
               valueFrom:
@@ -39,7 +39,7 @@ spec:
             - name: DB_NAME
               valueFrom:
                 configMapKeyRef:
-                  name: flask-config
+                  name: chaos-config
                   key: db_name
           readinessProbe:
             httpGet:

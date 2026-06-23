@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mysql
-  namespace: assignment3
+  namespace: chaos
   labels:
     app: mysql
 spec:
