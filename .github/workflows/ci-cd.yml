@@ -19,10 +19,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push CHAOS image
+      - name: Build and push Flask API image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./app/chaos-web
+          file: ./app/chaos-web/Dockerfile
           push: true
-          tags: nayza72/chaos-app:latest
+          tags: nayza72/flask-api:latest
+
+      - name: Build and push Nginx image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app/nginx
+          file: ./app/nginx/Dockerfile
+          push: true
+          tags: nayza72/nginx-proxy:latest

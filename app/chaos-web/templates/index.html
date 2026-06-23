@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>C.H.A.O.S — Cognitive Heuristic Adaptive Operating System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ===== RESET & BASE ===== */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg-deep:    #06060b;
+      --bg-base:    #0a0a0f;
+      --bg-surface: #111118;
+      --bg-card:    #16161f;
+      --bg-raised:  #1c1c28;
+      --bg-hover:   #222232;
+      --border:     rgba(255,255,255,0.06);
+      --border-lit: rgba(255,255,255,0.10);
+      --text-pri:   #eaeaf0;
+      --text-sec:   #8888a0;
+      --text-dim:   #55556a;
+      --accent:     #dc2626;
+      --accent-lit: #ef4444;
+      --accent-dim: #991b1b;
+      --accent-glow: rgba(220,38,38,0.35);
+      --accent-soft: rgba(220,38,38,0.10);
+      --green:      #22c55e;
+      --blue:       #3b82f6;
+      --amber:      #f59e0b;
+      --purple:     #a855f7;
+      --sidebar-w:  72px;
+      --sidebar-exp:260px;
+      --topbar-h:   56px;
+      --radius:     12px;
+      --radius-sm:  8px;
+      --radius-xs:  6px;
+      --transition: 0.25s cubic-bezier(0.4,0,0.2,1);
+      --spring:     0.4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+
+    html { font-size: 14px; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-pri);
+      overflow: hidden;
+      height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+    /* ===== LAYOUT SHELL ===== */
+    .app-shell {
+      display: flex;
+      height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      height: 100vh;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: width var(--transition), min-width var(--transition);
+      z-index: 100;
+      position: relative;
+      overflow: hidden;
+    }
+    .sidebar.expanded {
+      width: var(--sidebar-exp);
+      min-width: var(--sidebar-exp);
+    }
+
+    /* Logo */
+    .sidebar-logo {
+      width: 100%;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 0 16px;
+      cursor: pointer;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 15px; color: #fff;
+      flex-shrink: 0;
+      box-shadow: 0 0 20px var(--accent-glow), 0 0 40px rgba(220,38,38,0.15);
+      position: relative;
+    }
+    .logo-icon::after {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent-lit), transparent);
+      opacity: 0.3;
+      z-index: -1;
+    }
+    .logo-text {
+      font-weight: 800;
+      font-size: 16px;
+      letter-spacing: 3px;
+      color: var(--text-pri);
+      white-space: nowrap;
+      opacity: 0;
+      transform: translateX(-8px);
+      transition: opacity var(--transition), transform var(--transition);
+    }
+    .sidebar.expanded .logo-text {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* Nav */
+    .sidebar-nav {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+      gap: 2px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition);
+      color: var(--text-sec);
+      position: relative;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .nav-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-pri);
+    }
+    .nav-item.active {
+      background: var(--accent-soft);
+      color: var(--accent-lit);
+    }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 50%;
+      transform: translateY(-50%);
+      width: 3px; height: 24px;
+      background: var(--accent);
+      border-radius: 0 4px 4px 0;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .nav-icon {
+      width: 22px; height: 22px;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .nav-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .nav-label {
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateX(-6px);
+      transition: opacity var(--transition), transform var(--transition);
+    }
+    .sidebar.expanded .nav-label {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* Sidebar Toggle */
+    .sidebar-toggle {
+      width: 100%;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-dim);
+      transition: color var(--transition);
+      flex-shrink: 0;
+    }
+    .sidebar-toggle:hover { color: var(--text-pri); }
+    .sidebar-toggle svg {
+      width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round;
+      transition: transform var(--transition);
+    }
+    .sidebar.expanded .sidebar-toggle svg { transform: rotate(180deg); }
+
+    /* Sidebar bottom info */
+    .sidebar-footer {
+      width: 100%;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .sidebar-footer-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-dim), var(--purple));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: #fff;
+      flex-shrink: 0;
+    }
+    .sidebar-footer-info {
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+    .sidebar.expanded .sidebar-footer-info { opacity: 1; }
+    .sidebar-footer-name { font-size: 12px; font-weight: 600; color: var(--text-pri); white-space: nowrap; }
+    .sidebar-footer-role { font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+
+    /* ===== MAIN AREA ===== */
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      height: 100vh;
+      background: var(--bg-base);
+    }
+
+    /* ===== TOP BAR ===== */
+    .topbar {
+      height: var(--topbar-h);
+      min-height: var(--topbar-h);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,10,15,0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      gap: 16px;
+      z-index: 50;
+    }
+    .topbar-brand {
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 4px;
+      color: var(--accent);
+      text-shadow: 0 0 20px var(--accent-glow);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+    .topbar-brand .dot {
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 6px var(--accent-glow);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent-glow); }
+      50% { opacity: 0.5; box-shadow: 0 0 12px var(--accent-glow); }
+    }
+    .topbar-divider {
+      width: 1px; height: 24px;
+      background: var(--border-lit);
+    }
+    .topbar-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-sec);
+    }
+    .topbar-spacer { flex: 1; }
+    .topbar-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-sec);
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px rgba(34,197,94,0.5);
+      animation: pulse-green 2.5s ease-in-out infinite;
+    }
+    .status-dot.offline { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); animation-name: pulse-dot; }
+    @keyframes pulse-green {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .topbar-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      min-width: 60px;
+      text-align: right;
+    }
+
+    /* ===== CONTENT VIEWS ===== */
+    .content-area {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+    .view {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      overflow: hidden;
+    }
+    .view.active {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateY(0);
+    }
+
+    /* ===== CHAT VIEW ===== */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 24px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .msg-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 16px;
+      animation: msg-in 0.35s var(--spring) backwards;
+    }
+    @keyframes msg-in {
+      from { opacity: 0; transform: translateY(12px) scale(0.97); }
+    }
+    .msg-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .msg-avatar {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .msg-avatar.ai {
+      background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+      color: #fff;
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .msg-avatar.user {
+      background: linear-gradient(135deg, var(--blue), #1d4ed8);
+      color: #fff;
+    }
+    .msg-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-sec);
+    }
+    .msg-time {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .msg-bubble {
+      max-width: 680px;
+      padding: 12px 16px;
+      border-radius: 4px 16px 16px 16px;
+      font-size: 13.5px;
+      line-height: 1.65;
+      color: var(--text-pri);
+      position: relative;
+      word-wrap: break-word;
+    }
+    .msg-group.ai .msg-bubble {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+    }
+    .msg-group.user .msg-bubble {
+      background: rgba(59,130,246,0.12);
+      border: 1px solid rgba(59,130,246,0.15);
+      border-radius: 16px 4px 16px 16px;
+      margin-left: auto;
+    }
+    .msg-group.user .msg-header { justify-content: flex-end; }
+    .msg-group.user { align-items: flex-end; }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 4px 16px 16px 16px;
+      max-width: 120px;
+      margin-top: 4px;
+    }
+    .typing-indicator.visible { display: flex; }
+    .typing-dot {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: typing-bounce 1.4s ease-in-out infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing-bounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    /* Chat input */
+    .chat-input-bar {
+      padding: 12px 24px 20px;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+    .chat-input-wrap {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 8px;
+      transition: border-color var(--transition), box-shadow var(--transition);
+      position: relative;
+    }
+    .chat-input-wrap:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(220,38,38,0.1), 0 0 20px rgba(220,38,38,0.05);
+    }
+    .chat-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text-pri);
+      font-family: 'Inter', sans-serif;
+      font-size: 13.5px;
+      line-height: 1.5;
+      padding: 8px 10px;
+      resize: none;
+      max-height: 120px;
+      min-height: 22px;
+    }
+    .chat-input::placeholder { color: var(--text-dim); }
+    .btn-icon {
+      width: 38px; height: 38px;
+      border: none; border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition), transform 0.15s ease;
+      color: var(--text-dim);
+      background: transparent;
+      flex-shrink: 0;
+    }
+    .btn-icon:hover { background: var(--bg-hover); color: var(--text-pri); }
+    .btn-icon:active { transform: scale(0.92); }
+    .btn-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .btn-send {
+      background: var(--accent) !important;
+      color: #fff !important;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+    .btn-send:hover { background: var(--accent-lit) !important; }
+
+    /* ===== DASHBOARD VIEW ===== */
+    .dashboard-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .section-header h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-pri);
+    }
+    .section-header .line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+    }
+    .stat-card:hover {
+      border-color: var(--border-lit);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .stat-card.red::before { background: linear-gradient(90deg, var(--accent), var(--accent-lit)); }
+    .stat-card.blue::before { background: linear-gradient(90deg, var(--blue), #60a5fa); }
+    .stat-card.green::before { background: linear-gradient(90deg, var(--green), #4ade80); }
+    .stat-card.amber::before { background: linear-gradient(90deg, var(--amber), #fbbf24); }
+    .stat-card.purple::before { background: linear-gradient(90deg, var(--purple), #c084fc); }
+    .stat-icon {
+      width: 40px; height: 40px;
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 14px;
+    }
+    .stat-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .stat-icon.red { background: var(--accent-soft); color: var(--accent-lit); }
+    .stat-icon.blue { background: rgba(59,130,246,0.12); color: var(--blue); }
+    .stat-icon.green { background: rgba(34,197,94,0.12); color: var(--green); }
+    .stat-icon.amber { background: rgba(245,158,11,0.12); color: var(--amber); }
+    .stat-icon.purple { background: rgba(168,85,247,0.12); color: var(--purple); }
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--text-pri);
+      font-family: 'JetBrains Mono', 'Inter', monospace;
+      letter-spacing: -1px;
+    }
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .stat-sub .up { color: var(--green); }
+    .stat-sub .down { color: var(--accent); }
+
+    /* Activity Graph Placeholder */
+    .activity-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .activity-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-sec);
+    }
+    .activity-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      height: 100px;
+    }
+    .activity-bar {
+      flex: 1;
+      background: var(--accent-soft);
+      border-radius: 4px 4px 0 0;
+      min-height: 4px;
+      position: relative;
+      transition: height 0.8s var(--spring);
+    }
+    .activity-bar::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 4px 4px 0 0;
+    }
+    .activity-labels {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .activity-labels span {
+      flex: 1;
+      text-align: center;
+      font-size: 10px;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ===== SESSIONS VIEW ===== */
+    .sessions-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .session-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .session-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: border-color var(--transition), background var(--transition), transform var(--transition);
+      animation: msg-in 0.35s ease backwards;
+    }
+    .session-item:hover {
+      border-color: var(--border-lit);
+      background: var(--bg-raised);
+      transform: translateX(4px);
+    }
+    .session-icon {
+      width: 40px; height: 40px;
+      border-radius: var(--radius-sm);
+      background: var(--accent-soft);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent-lit);
+      flex-shrink: 0;
+    }
+    .session-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .session-info { flex: 1; min-width: 0; }
+    .session-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-pri);
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-meta {
+      font-size: 11.5px;
+      color: var(--text-dim);
+      display: flex;
+      gap: 12px;
+    }
+    .session-badge {
+      font-size: 10px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+    .session-badge.active { background: rgba(34,197,94,0.12); color: var(--green); }
+    .session-badge.closed { background: rgba(136,136,160,0.12); color: var(--text-dim); }
+
+    /* ===== MEMORY VIEW ===== */
+    .memory-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .memory-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .memory-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      transition: border-color var(--transition), transform var(--transition);
+      animation: msg-in 0.35s ease backwards;
+    }
+    .memory-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .memory-key {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-lit);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .memory-key::before {
+      content: '';
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 2px;
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+    .memory-value {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-sec);
+    }
+    .memory-ts {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 10px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ===== SETTINGS VIEW ===== */
+    .settings-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .settings-section {
+      margin-bottom: 32px;
+    }
+    .settings-section h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 14px;
+    }
+    .settings-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      transition: background var(--transition);
+    }
+    .setting-row:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+    .setting-row:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+    .setting-row:only-child { border-radius: var(--radius); }
+    .setting-row:hover { background: var(--bg-raised); }
+    .setting-info { flex: 1; }
+    .setting-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-pri);
+      margin-bottom: 2px;
+    }
+    .setting-desc {
+      font-size: 11.5px;
+      color: var(--text-dim);
+    }
+    /* Toggle */
+    .toggle {
+      width: 44px; height: 24px;
+      background: var(--bg-hover);
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background var(--transition);
+      flex-shrink: 0;
+    }
+    .toggle.on { background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      top: 3px; left: 3px;
+      transition: transform var(--transition);
+    }
+    .toggle.on::after { transform: translateX(20px); }
+    /* Select-like */
+    .setting-select {
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      color: var(--text-pri);
+      font-size: 12px;
+      padding: 6px 12px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      min-width: 120px;
+    }
+    .version-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 20px;
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .version-badge .dot-red {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+    }
+
+    /* ===== EMPTY STATE ===== */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--text-dim);
+      gap: 12px;
+      padding: 40px;
+    }
+    .empty-state svg { width: 48px; height: 48px; stroke: var(--text-dim); fill: none; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; opacity: 0.4; }
+    .empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text-sec); }
+    .empty-state p { font-size: 13px; max-width: 360px; line-height: 1.6; }
+
+    /* ===== WELCOME SPLASH ===== */
+    .chat-welcome {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 24px;
+      gap: 8px;
+      animation: fade-in 0.6s ease;
+    }
+    @keyframes fade-in { from { opacity: 0; } }
+    .welcome-glyph {
+      width: 72px; height: 72px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 900; color: #fff;
+      margin-bottom: 8px;
+      box-shadow: 0 0 40px var(--accent-glow), 0 0 80px rgba(220,38,38,0.12);
+      position: relative;
+    }
+    .welcome-glyph::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 24px;
+      background: conic-gradient(from 0deg, var(--accent-lit), transparent, var(--accent), transparent, var(--accent-lit));
+      opacity: 0.2;
+      animation: spin 6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .chat-welcome h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-pri);
+      margin-top: 8px;
+    }
+    .chat-welcome p {
+      font-size: 13px;
+      color: var(--text-dim);
+      max-width: 420px;
+      line-height: 1.6;
+    }
+    .chat-welcome .subtitle {
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* ===== GLITCH TEXT ===== */
+    .glitch {
+      position: relative;
+    }
+    .glitch::before, .glitch::after {
+      content: attr(data-text);
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+    .glitch::before {
+      animation: glitch-1 3s infinite linear alternate-reverse;
+      clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
+      color: #0ff;
+      opacity: 0.04;
+    }
+    .glitch::after {
+      animation: glitch-2 2.5s infinite linear alternate-reverse;
+      clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
+      color: var(--accent);
+      opacity: 0.04;
+    }
+    @keyframes glitch-1 {
+      0% { transform: translate(0); }
+      20% { transform: translate(-2px, 1px); }
+      40% { transform: translate(2px, -1px); }
+      60% { transform: translate(-1px, 2px); }
+      80% { transform: translate(1px, -2px); }
+      100% { transform: translate(0); }
+    }
+    @keyframes glitch-2 {
+      0% { transform: translate(0); }
+      25% { transform: translate(2px, -1px); }
+      50% { transform: translate(-2px, 1px); }
+      75% { transform: translate(1px, 2px); }
+      100% { transform: translate(0); }
+    }
+
+    /* ===== LOADING SKELETON ===== */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-raised) 50%, var(--bg-card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: var(--radius-sm);
+    }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+
+    /* ===== MOBILE RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0; top: 0;
+        z-index: 200;
+        transform: translateX(-100%);
+        transition: transform var(--transition);
+      }
+      .sidebar.mobile-open {
+        transform: translateX(0);
+        width: var(--sidebar-exp) !important;
+        min-width: var(--sidebar-exp) !important;
+      }
+      .sidebar.mobile-open .logo-text,
+      .sidebar.mobile-open .nav-label,
+      .sidebar.mobile-open .sidebar-footer-info {
+        opacity: 1;
+        transform: translateX(0);
+      }
+      .mobile-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 150;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--transition);
+      }
+      .mobile-overlay.visible {
+        opacity: 1;
+        pointer-events: all;
+      }
+      .topbar-hamburger { display: flex !important; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .memory-grid { grid-template-columns: 1fr; }
+      .msg-bubble { max-width: 90vw; }
+    }
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: 1fr; }
+    }
+    .topbar-hamburger {
+      display: none;
+      width: 36px; height: 36px;
+      border: none; border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-sec);
+      cursor: pointer;
+      align-items: center; justify-content: center;
+    }
+    .topbar-hamburger svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ===== PARTICLE CANVAS ===== */
+    #particle-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+    .app-shell { position: relative; z-index: 1; }
+
+    /* ===== SCANLINE OVERLAY ===== */
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.015) 2px,
+        rgba(0,0,0,0.015) 4px
+      );
+    }
+
+    /* ===== NOTIFICATION TOAST ===== */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-sm);
+      padding: 12px 18px;
+      font-size: 12.5px;
+      color: var(--text-pri);
+      min-width: 260px;
+      max-width: 380px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      animation: toast-in 0.4s var(--spring);
+      backdrop-filter: blur(12px);
+    }
+    .toast.hide {
+      animation: toast-out 0.3s ease forwards;
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(12px) scale(0.95); }
+    }
+    @keyframes toast-out {
+      to { opacity: 0; transform: translateY(-8px) scale(0.95); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="particle-canvas"></canvas>
+  <div class="scanlines"></div>
+
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileSidebar()"></div>
+
+  <div class="app-shell">
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo" onclick="toggleSidebar()">
+        <div class="logo-icon">C</div>
+        <span class="logo-text">C.H.A.O.S</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-view="chat" onclick="switchView('chat')">
+          <span class="nav-icon"><svg><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <span class="nav-label">Chat</span>
+        </a>
+        <a class="nav-item" data-view="dashboard" onclick="switchView('dashboard')">
+          <span class="nav-icon"><svg><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+          <span class="nav-label">Dashboard</span>
+        </a>
+        <a class="nav-item" data-view="sessions" onclick="switchView('sessions')">
+          <span class="nav-icon"><svg><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg></span>
+          <span class="nav-label">Sessions</span>
+        </a>
+        <a class="nav-item" data-view="memory" onclick="switchView('memory')">
+          <span class="nav-icon"><svg><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
+          <span class="nav-label">Memory</span>
+        </a>
+        <a class="nav-item" data-view="settings" onclick="switchView('settings')">
+          <span class="nav-icon"><svg><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+          <span class="nav-label">Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-toggle" onclick="toggleSidebar()">
+        <svg><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-footer-avatar">U</div>
+        <div class="sidebar-footer-info">
+          <div class="sidebar-footer-name">Operator</div>
+          <div class="sidebar-footer-role">Admin Access</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="main-area">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <button class="topbar-hamburger" onclick="toggleMobileSidebar()">
+          <svg><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="topbar-brand">
+          <span class="dot"></span>
+          <span class="glitch" data-text="C.H.A.O.S">C.H.A.O.S</span>
+        </div>
+        <div class="topbar-divider"></div>
+        <div class="topbar-title" id="viewTitle">Chat</div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-status">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Online</span>
+        </div>
+        <div class="topbar-divider"></div>
+        <div class="topbar-clock" id="clock">00:00</div>
+      </header>
+
+      <!-- Content -->
+      <div class="content-area">
+        <!-- CHAT VIEW -->
+        <div class="view active" id="view-chat">
+          <div class="chat-messages" id="chatMessages">
+            <div class="chat-welcome" id="chatWelcome">
+              <div class="welcome-glyph">C</div>
+              <div class="subtitle">Cognitive Heuristic Adaptive Operating System</div>
+              <h2>Welcome back, Operator.</h2>
+              <p>I'm C.H.A.O.S — your AI workspace assistant. Ask me anything, run commands, or explore the dashboard. Every session is remembered.</p>
+            </div>
+          </div>
+          <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+          <div class="chat-input-bar">
+            <div class="chat-input-wrap">
+              <button class="btn-icon" title="Voice input">
+                <svg><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              </button>
+              <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask C.H.A.O.S anything..." onkeydown="handleInputKey(event)"></textarea>
+            </div>
+            <button class="btn-icon btn-send" title="Send message" onclick="sendMessage()">
+              <svg><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- DASHBOARD VIEW -->
+        <div class="view" id="view-dashboard">
+          <div class="dashboard-scroll">
+            <div class="section-header">
+              <h2>System Overview</h2>
+              <div class="line"></div>
+            </div>
+            <div class="stats-grid" id="statsGrid">
+              <!-- Cards injected by JS -->
+            </div>
+
+            <div class="activity-card">
+              <h3>Activity — Last 7 Days</h3>
+              <div class="activity-bars" id="activityBars">
+                <!-- Bars injected by JS -->
+              </div>
+              <div class="activity-labels" id="activityLabels">
+                <!-- Labels injected by JS -->
+              </div>
+            </div>
+
+            <div class="section-header">
+              <h2>Recent Actions</h2>
+              <div class="line"></div>
+            </div>
+            <div class="session-list" id="recentActions">
+              <!-- Filled by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- SESSIONS VIEW -->
+        <div class="view" id="view-sessions">
+          <div class="sessions-scroll">
+            <div class="section-header">
+              <h2>Session History</h2>
+              <div class="line"></div>
+            </div>
+            <div class="session-list" id="sessionList">
+              <!-- Filled by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- MEMORY VIEW -->
+        <div class="view" id="view-memory">
+          <div class="memory-scroll">
+            <div class="section-header">
+              <h2>Persistent Memory</h2>
+              <div class="line"></div>
+            </div>
+            <div class="memory-grid" id="memoryGrid">
+              <!-- Filled by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- SETTINGS VIEW -->
+        <div class="view" id="view-settings">
+          <div class="settings-scroll">
+            <div class="section-header">
+              <h2>Configuration</h2>
+              <div class="line"></div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Appearance</h3>
+              <div class="settings-group">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Dark Mode</div>
+                    <div class="setting-desc">Use dark color scheme across the interface</div>
+                  </div>
+                  <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Scanline Overlay</div>
+                    <div class="setting-desc">Retro CRT scanline effect for extra aesthetics</div>
+                  </div>
+                  <div class="toggle on" id="toggleScanlines" onclick="toggleScanlineEffect(this)"></div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Particle Background</div>
+                    <div class="setting-desc">Ambient floating particles in the background</div>
+                  </div>
+                  <div class="toggle on" id="toggleParticles" onclick="toggleParticleEffect(this)"></div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Accent Color</div>
+                    <div class="setting-desc">Primary accent for highlights and indicators</div>
+                  </div>
+                  <select class="setting-select" onchange="changeAccent(this.value)">
+                    <option value="#dc2626" selected>Crimson</option>
+                    <option value="#3b82f6">Azure</option>
+                    <option value="#22c55e">Emerald</option>
+                    <option value="#a855f7">Violet</option>
+                    <option value="#f59e0b">Amber</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>AI Behavior</h3>
+              <div class="settings-group">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Typing Animation</div>
+                    <div class="setting-desc">Simulate typing for AI responses</div>
+                  </div>
+                  <div class="toggle on" id="toggleTyping" onclick="this.classList.toggle('on')"></div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Sound Effects</div>
+                    <div class="setting-desc">Play subtle sounds on message send/receive</div>
+                  </div>
+                  <div class="toggle" onclick="this.classList.toggle('on')"></div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Response Model</div>
+                    <div class="setting-desc">Select the language model used for responses</div>
+                  </div>
+                  <select class="setting-select">
+                    <option>C.H.A.O.S-v3</option>
+                    <option>C.H.A.O.S-v2</option>
+                    <option>C.H.A.O.S-lite</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Data & Privacy</h3>
+              <div class="settings-group">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Persistent Memory</div>
+                    <div class="setting-desc">Remember context across sessions</div>
+                  </div>
+                  <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Session Logging</div>
+                    <div class="setting-desc">Log all conversations for future reference</div>
+                  </div>
+                  <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="version-badge">
+              <span class="dot-red"></span>
+              C.H.A.O.S v3.0.1 &nbsp;·&nbsp; Build 2026.06.20 &nbsp;·&nbsp; Flask Backend
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    /* =========================================================
+       C.H.A.O.S — Frontend Engine
+       Cognitive Heuristic Adaptive Operating System
+       ========================================================= */
+
+    // ===== STATE =====
+    const state = {
+      currentView: 'chat',
+      sidebarExpanded: false,
+      messages: [],
+      sessions: [],
+      memory: [],
+      stats: {},
+      isOnline: true,
+      isTyping: false,
+    };
+
+    // ===== CLOCK =====
+    function updateClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // ===== SIDEBAR =====
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('expanded');
+      state.sidebarExpanded = !state.sidebarExpanded;
+    }
+    function toggleMobileSidebar() {
+      const sb = document.getElementById('sidebar');
+      const ov = document.getElementById('mobileOverlay');
+      sb.classList.toggle('mobile-open');
+      ov.classList.toggle('visible');
+    }
+
+    // ===== VIEW ROUTING =====
+    const viewTitles = {
+      chat: 'Chat',
+      dashboard: 'Dashboard',
+      sessions: 'Sessions',
+      memory: 'Memory',
+      settings: 'Settings',
+    };
+
+    function switchView(name) {
+      if (state.currentView === name) return;
+      state.currentView = name;
+
+      // Update nav
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.view === name);
+      });
+
+      // Update views
+      document.querySelectorAll('.view').forEach(el => {
+        el.classList.toggle('active', el.id === `view-${name}`);
+      });
+
+      // Update title
+      document.getElementById('viewTitle').textContent = viewTitles[name] || name;
+
+      // Close mobile sidebar
+      document.getElementById('sidebar').classList.remove('mobile-open');
+      document.getElementById('mobileOverlay').classList.remove('visible');
+
+      // Load data on view switch
+      if (name === 'dashboard') loadDashboard();
+      if (name === 'sessions') loadSessions();
+      if (name === 'memory') loadMemory();
+    }
+
+    // ===== API HELPERS =====
+    const API_BASE = '';
+
+    async function apiFetch(endpoint, options = {}) {
+      try {
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+          headers: { 'Content-Type': 'application/json' },
+          ...options,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.warn(`API call failed: ${endpoint}`, err);
+        return null;
+      }
+    }
+
+    // ===== CHAT =====
+    function formatTime(ts) {
+      if (!ts) {
+        const now = new Date();
+        return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+      const d = new Date(ts);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderMessage(msg, animate = false) {
+      const container = document.getElementById('chatMessages');
+      const welcome = document.getElementById('chatWelcome');
+      if (welcome) welcome.style.display = 'none';
+
+      const isAI = msg.role === 'assistant' || msg.role === 'ai';
+      const group = document.createElement('div');
+      group.className = `msg-group ${isAI ? 'ai' : 'user'}`;
+      if (animate) group.style.animationDelay = '0.05s';
+
+      group.innerHTML = `
+        <div class="msg-header">
+          <div class="msg-avatar ${isAI ? 'ai' : 'user'}">${isAI ? 'C' : 'U'}</div>
+          <span class="msg-name">${isAI ? 'C.H.A.O.S' : 'You'}</span>
+          <span class="msg-time">${formatTime(msg.timestamp)}</span>
+        </div>
+        <div class="msg-bubble">${escapeHtml(msg.content)}</div>
+      `;
+
+      container.appendChild(group);
+      scrollToBottom();
+    }
+
+    function scrollToBottom() {
+      const container = document.getElementById('chatMessages');
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function handleInputKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+      // Auto resize textarea
+      const ta = e.target;
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text || state.isTyping) return;
+
+      // Add user message
+      const userMsg = { role: 'user', content: text, timestamp: new Date().toISOString() };
+      state.messages.push(userMsg);
+      renderMessage(userMsg, true);
+
+      input.value = '';
+      input.style.height = 'auto';
+
+      // Show typing
+      showTyping(true);
+
+      // Try API first
+      const apiResponse = await apiFetch('/api/chat/send', {
+        method: 'POST',
+        body: JSON.stringify({ message: text }),
+      });
+
+      if (apiResponse && apiResponse.response) {
+        showTyping(false);
+        const aiMsg = {
+          role: 'assistant',
+          content: apiResponse.response,
+          timestamp: apiResponse.timestamp || new Date().toISOString(),
+        };
+        state.messages.push(aiMsg);
+
+        const useTypingAnim = document.getElementById('toggleTyping')?.classList.contains('on');
+        if (useTypingAnim) {
+          typewriterMessage(aiMsg);
+        } else {
+          renderMessage(aiMsg, true);
+        }
+      } else {
+        // Fallback: local simulated response
+        await simulateDelay(800 + Math.random() * 1200);
+        showTyping(false);
+        const reply = generateLocalResponse(text);
+        const aiMsg = { role: 'assistant', content: reply, timestamp: new Date().toISOString() };
+        state.messages.push(aiMsg);
+
+        const useTypingAnim = document.getElementById('toggleTyping')?.classList.contains('on');
+        if (useTypingAnim) {
+          typewriterMessage(aiMsg);
+        } else {
+          renderMessage(aiMsg, true);
+        }
+      }
+    }
+
+    function showTyping(show) {
+      state.isTyping = show;
+      const el = document.getElementById('typingIndicator');
+      el.classList.toggle('visible', show);
+      if (show) scrollToBottom();
+    }
+
+    function typewriterMessage(msg) {
+      const container = document.getElementById('chatMessages');
+      const welcome = document.getElementById('chatWelcome');
+      if (welcome) welcome.style.display = 'none';
+
+      const group = document.createElement('div');
+      group.className = 'msg-group ai';
+      group.innerHTML = `
+        <div class="msg-header">
+          <div class="msg-avatar ai">C</div>
+          <span class="msg-name">C.H.A.O.S</span>
+          <span class="msg-time">${formatTime(msg.timestamp)}</span>
+        </div>
+        <div class="msg-bubble"></div>
+      `;
+      container.appendChild(group);
+
+      const bubble = group.querySelector('.msg-bubble');
+      const fullText = escapeHtml(msg.content);
+      let i = 0;
+      state.isTyping = true;
+
+      function typeChar() {
+        if (i < fullText.length) {
+          bubble.innerHTML = fullText.substring(0, i + 1) + '<span style="opacity:0.5;animation:pulse-dot 0.8s ease-in-out infinite">▌</span>';
+          i++;
+          scrollToBottom();
+          setTimeout(typeChar, 12 + Math.random() * 18);
+        } else {
+          bubble.innerHTML = fullText;
+          state.isTyping = false;
+        }
+      }
+      typeChar();
+    }
+
+    function generateLocalResponse(input) {
+      const lower = input.toLowerCase();
+      const responses = [
+        { keys: ['hello', 'hi', 'hey'], reply: 'Hello, Operator. All systems nominal. How can I assist you today?' },
+        { keys: ['status', 'health'], reply: 'System Status: All core modules operational. Memory utilization at 47%. Uptime: 72 hours. No anomalies detected in the last 24-hour cycle.' },
+        { keys: ['who are you', 'what are you'], reply: 'I am C.H.A.O.S — the Cognitive Heuristic Adaptive Operating System. I serve as your AI workspace assistant, managing sessions, memory, and providing intelligent support across all operations.' },
+        { keys: ['help', 'what can you do'], reply: 'I can assist with: managing your session history, storing persistent memory, providing system analytics, running diagnostics, and answering questions. Navigate using the sidebar to explore all capabilities.' },
+        { keys: ['time', 'date'], reply: `Current system time: ${new Date().toLocaleString()}. All chronometers synchronized.` },
+        { keys: ['memory', 'remember'], reply: 'Memory subsystem active. I maintain persistent key-value storage across sessions. Visit the Memory tab to review all stored entries. Want me to remember something specific?' },
+        { keys: ['session', 'history'], reply: 'Session manager active. I track all conversation sessions with timestamps and metadata. Check the Sessions tab for full history.' },
+      ];
+
+      for (const r of responses) {
+        if (r.keys.some(k => lower.includes(k))) return r.reply;
+      }
+
+      const fallbacks = [
+        `Understood. Processing your request: "${input}". I've logged this to the current session for future reference.`,
+        `Acknowledged, Operator. I've analyzed your input. For more detailed operations, explore the Dashboard or check system status.`,
+        `Input received. C.H.A.O.S cognitive engine is processing. All relevant data has been indexed to persistent memory.`,
+        `Roger that. My heuristic analysis suggests this is a valid query. Session has been updated accordingly.`,
+        `Processing complete. The adaptive operating system has catalogued your request. Is there anything else you'd like me to handle?`,
+      ];
+      return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+
+    function simulateDelay(ms) {
+      return new Promise(r => setTimeout(r, ms));
+    }
+
+    // ===== LOAD CHAT HISTORY =====
+    async function loadChatHistory() {
+      const data = await apiFetch('/api/chat/history');
+      if (data && data.messages && data.messages.length > 0) {
+        state.messages = data.messages;
+        const welcome = document.getElementById('chatWelcome');
+        if (welcome) welcome.style.display = 'none';
+        data.messages.forEach((m, i) => {
+          const msg = document.createElement('div');
+          const isAI = m.role === 'assistant' || m.role === 'ai';
+          msg.className = `msg-group ${isAI ? 'ai' : 'user'}`;
+          msg.style.animationDelay = `${i * 0.03}s`;
+          msg.innerHTML = `
+            <div class="msg-header">
+              <div class="msg-avatar ${isAI ? 'ai' : 'user'}">${isAI ? 'C' : 'U'}</div>
+              <span class="msg-name">${isAI ? 'C.H.A.O.S' : 'You'}</span>
+              <span class="msg-time">${formatTime(m.timestamp)}</span>
+            </div>
+            <div class="msg-bubble">${escapeHtml(m.content)}</div>
+          `;
+          document.getElementById('chatMessages').appendChild(msg);
+        });
+        scrollToBottom();
+      }
+    }
+
+    // ===== DASHBOARD =====
+    function renderStatCard(stat) {
+      return `
+        <div class="stat-card ${stat.color}">
+          <div class="stat-icon ${stat.color}">
+            <svg>${stat.icon}</svg>
+          </div>
+          <div class="stat-label">${stat.label}</div>
+          <div class="stat-value" data-target="${stat.value}">${stat.animated ? '0' : stat.value}</div>
+          <div class="stat-sub">${stat.sub}</div>
+        </div>
+      `;
+    }
+
+    async function loadDashboard() {
+      const grid = document.getElementById('statsGrid');
+      const apiStats = await apiFetch('/api/stats');
+
+      const stats = apiStats ? [
+        { label: 'Total Sessions', value: apiStats.total_sessions ?? '24', color: 'red', icon: '<path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>', sub: '<span class="up">↑ Live</span>', animated: true },
+        { label: 'Messages', value: apiStats.total_messages ?? '156', color: 'blue', icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', sub: 'All time', animated: true },
+        { label: 'Uptime', value: apiStats.uptime ?? '72h', color: 'green', icon: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>', sub: '<span class="up">● Healthy</span>', animated: false },
+        { label: 'Memory Keys', value: apiStats.memory_keys ?? '12', color: 'purple', icon: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>', sub: 'Persistent store', animated: true },
+        { label: 'CPU Load', value: apiStats.cpu_load ?? '23%', color: 'amber', icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>', sub: 'Current utilization', animated: false },
+      ] : [
+        { label: 'Total Sessions', value: '24', color: 'red', icon: '<path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>', sub: '<span class="up">↑ 12% this week</span>', animated: true },
+        { label: 'Messages Sent', value: '1,847', color: 'blue', icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', sub: '<span class="up">↑ 8% vs last week</span>', animated: true },
+        { label: 'Uptime', value: '99.9%', color: 'green', icon: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>', sub: '<span class="up">● All systems go</span>', animated: false },
+        { label: 'Memory Keys', value: '42', color: 'purple', icon: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>', sub: 'Persistent storage', animated: true },
+        { label: 'CPU Load', value: '23%', color: 'amber', icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>', sub: 'Current utilization', animated: false },
+        { label: 'Avg Response', value: '1.2s', color: 'red', icon: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', sub: '<span class="up">↑ Faster than avg</span>', animated: false },
+      ];
+
+      grid.innerHTML = stats.map(renderStatCard).join('');
+
+      // Animate numeric values
+      grid.querySelectorAll('.stat-value[data-target]').forEach(el => {
+        const raw = el.dataset.target;
+        const num = parseInt(raw.replace(/[^0-9]/g, ''));
+        if (!isNaN(num) && num > 0 && !raw.includes('%') && !raw.includes('s') && !raw.includes('h')) {
+          animateCounter(el, 0, num, 1200);
+        }
+      });
+
+      // Activity bars
+      renderActivityBars();
+      renderRecentActions();
+    }
+
+    function animateCounter(el, start, end, duration) {
+      const range = end - start;
+      const startTime = performance.now();
+      function tick(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = Math.floor(start + range * eased);
+        el.textContent = current.toLocaleString();
+        if (progress < 1) requestAnimationFrame(tick);
+        else el.textContent = end.toLocaleString();
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function renderActivityBars() {
+      const bars = document.getElementById('activityBars');
+      const labels = document.getElementById('activityLabels');
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const values = [65, 40, 85, 50, 90, 30, 70];
+
+      bars.innerHTML = '';
+      labels.innerHTML = '';
+
+      values.forEach((v, i) => {
+        const bar = document.createElement('div');
+        bar.className = 'activity-bar';
+        bar.style.height = '0%';
+        bars.appendChild(bar);
+
+        const label = document.createElement('span');
+        label.textContent = days[i];
+        labels.appendChild(label);
+
+        setTimeout(() => { bar.style.height = v + '%'; }, 100 + i * 80);
+      });
+    }
+
+    function renderRecentActions() {
+      const el = document.getElementById('recentActions');
+      const actions = [
+        { title: 'Memory key updated: user_preference', time: '2 minutes ago', icon: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>' },
+        { title: 'New session started: Debugging Pipeline', time: '15 minutes ago', icon: '<path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>' },
+        { title: 'System health check completed', time: '1 hour ago', icon: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
+      ];
+      el.innerHTML = actions.map(a => `
+        <div class="session-item">
+          <div class="session-icon"><svg style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round">${a.icon}</svg></div>
+          <div class="session-info">
+            <div class="session-title">${a.title}</div>
+            <div class="session-meta"><span>${a.time}</span></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ===== SESSIONS =====
+    async function loadSessions() {
+      const el = document.getElementById('sessionList');
+      el.innerHTML = '<div class="skeleton" style="height:60px;margin-bottom:8px"></div>'.repeat(3);
+
+      const data = await apiFetch('/api/sessions');
+      const sessions = data?.sessions || [
+        { id: 'sess_001', title: 'Infrastructure Deployment Planning', created_at: '2026-06-20T15:30:00Z', messages: 28, status: 'active' },
+        { id: 'sess_002', title: 'Docker Compose Debugging', created_at: '2026-06-20T12:15:00Z', messages: 45, status: 'active' },
+        { id: 'sess_003', title: 'CI/CD Pipeline Configuration', created_at: '2026-06-19T22:40:00Z', messages: 32, status: 'closed' },
+        { id: 'sess_004', title: 'Kubernetes Cluster Setup', created_at: '2026-06-19T18:00:00Z', messages: 19, status: 'closed' },
+        { id: 'sess_005', title: 'API Gateway Architecture Review', created_at: '2026-06-19T10:20:00Z', messages: 56, status: 'closed' },
+        { id: 'sess_006', title: 'Database Migration Strategy', created_at: '2026-06-18T14:45:00Z', messages: 37, status: 'closed' },
+        { id: 'sess_007', title: 'Load Testing & Performance Tuning', created_at: '2026-06-18T09:00:00Z', messages: 41, status: 'closed' },
+        { id: 'sess_008', title: 'Security Audit Walkthrough', created_at: '2026-06-17T20:30:00Z', messages: 23, status: 'closed' },
+      ];
+
+      state.sessions = sessions;
+      el.innerHTML = sessions.map((s, i) => {
+        const date = new Date(s.created_at);
+        const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `
+          <div class="session-item" style="animation-delay:${i * 0.05}s">
+            <div class="session-icon">
+              <svg><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <div class="session-info">
+              <div class="session-title">${s.title}</div>
+              <div class="session-meta">
+                <span>${dateStr} at ${timeStr}</span>
+                <span>${s.messages || '—'} messages</span>
+              </div>
+            </div>
+            <span class="session-badge ${s.status === 'active' ? 'active' : 'closed'}">${s.status}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ===== MEMORY =====
+    async function loadMemory() {
+      const el = document.getElementById('memoryGrid');
+      el.innerHTML = '<div class="skeleton" style="height:120px"></div>'.repeat(4);
+
+      const data = await apiFetch('/api/memory');
+      const entries = data?.entries || [
+        { key: 'user_name', value: 'Operator', updated_at: '2026-06-20T15:30:00Z' },
+        { key: 'preferred_model', value: 'C.H.A.O.S-v3 — High fidelity reasoning with extended context', updated_at: '2026-06-20T12:00:00Z' },
+        { key: 'project_context', value: 'DevOps Assignment 3 — Docker containerized Flask application with AI chat interface', updated_at: '2026-06-19T22:40:00Z' },
+        { key: 'deployment_target', value: 'Docker Compose with Nginx reverse proxy, PostgreSQL backend', updated_at: '2026-06-19T18:00:00Z' },
+        { key: 'coding_style', value: 'Clean architecture, comprehensive error handling, detailed documentation', updated_at: '2026-06-19T10:00:00Z' },
+        { key: 'timezone', value: 'UTC+5 — Asia/Karachi', updated_at: '2026-06-18T14:45:00Z' },
+        { key: 'last_debug_topic', value: 'Flask CORS configuration for cross-origin API requests', updated_at: '2026-06-18T09:00:00Z' },
+        { key: 'session_theme', value: 'Crimson dark mode — glassmorphism UI with particle effects', updated_at: '2026-06-17T20:30:00Z' },
+        { key: 'ai_personality', value: 'Professional, concise, technically precise. Operator-grade responses.', updated_at: '2026-06-17T15:00:00Z' },
+      ];
+
+      state.memory = entries;
+      el.innerHTML = entries.map((m, i) => {
+        const date = m.updated_at ? new Date(m.updated_at) : new Date();
+        return `
+          <div class="memory-card" style="animation-delay:${i * 0.05}s">
+            <div class="memory-key">${m.key}</div>
+            <div class="memory-value">${m.value}</div>
+            <div class="memory-ts">Updated ${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ===== SETTINGS HELPERS =====
+    function toggleScanlineEffect(el) {
+      el.classList.toggle('on');
+      document.querySelector('.scanlines').style.display = el.classList.contains('on') ? '' : 'none';
+    }
+
+    function toggleParticleEffect(el) {
+      el.classList.toggle('on');
+      document.getElementById('particle-canvas').style.display = el.classList.contains('on') ? '' : 'none';
+    }
+
+    function changeAccent(color) {
+      document.documentElement.style.setProperty('--accent', color);
+      document.documentElement.style.setProperty('--accent-lit', color);
+      document.documentElement.style.setProperty('--accent-glow', color + '59');
+      document.documentElement.style.setProperty('--accent-soft', color + '1a');
+      showToast(`Accent color updated`);
+    }
+
+    // ===== TOAST =====
+    function showToast(msg) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add('hide');
+        setTimeout(() => toast.remove(), 300);
+      }, 2500);
+    }
+
+    // ===== PARTICLE SYSTEM =====
+    (function initParticles() {
+      const canvas = document.getElementById('particle-canvas');
+      const ctx = canvas.getContext('2d');
+      let particles = [];
+      let w, h;
+      const MAX_PARTICLES = 50;
+
+      function resize() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      class Particle {
+        constructor() {
+          this.reset();
+        }
+        reset() {
+          this.x = Math.random() * w;
+          this.y = Math.random() * h;
+          this.vx = (Math.random() - 0.5) * 0.3;
+          this.vy = (Math.random() - 0.5) * 0.3;
+          this.r = Math.random() * 1.5 + 0.5;
+          this.alpha = Math.random() * 0.4 + 0.1;
+          this.hue = Math.random() > 0.7 ? 0 : 240;
+        }
+        update() {
+          this.x += this.vx;
+          this.y += this.vy;
+          if (this.x < 0 || this.x > w || this.y < 0 || this.y > h) this.reset();
+        }
+        draw() {
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+          ctx.fillStyle = this.hue === 0
+            ? `rgba(220, 38, 38, ${this.alpha})`
+            : `rgba(100, 100, 160, ${this.alpha * 0.5})`;
+          ctx.fill();
+        }
+      }
+
+      for (let i = 0; i < MAX_PARTICLES; i++) {
+        particles.push(new Particle());
+      }
+
+      function drawConnections() {
+        for (let i = 0; i < particles.length; i++) {
+          for (let j = i + 1; j < particles.length; j++) {
+            const dx = particles[i].x - particles[j].x;
+            const dy = particles[i].y - particles[j].y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 120) {
+              ctx.beginPath();
+              ctx.moveTo(particles[i].x, particles[i].y);
+              ctx.lineTo(particles[j].x, particles[j].y);
+              ctx.strokeStyle = `rgba(220, 38, 38, ${0.06 * (1 - dist / 120)})`;
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      function loop() {
+        ctx.clearRect(0, 0, w, h);
+        particles.forEach(p => { p.update(); p.draw(); });
+        drawConnections();
+        requestAnimationFrame(loop);
+      }
+      loop();
+    })();
+
+    // ===== STATUS HEARTBEAT =====
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/stats', { method: 'GET' });
+        state.isOnline = res.ok;
+      } catch {
+        state.isOnline = false;
+      }
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      if (state.isOnline) {
+        dot.className = 'status-dot';
+        text.textContent = 'Online';
+      } else {
+        dot.className = 'status-dot offline';
+        text.textContent = 'Offline';
+      }
+    }
+    setInterval(checkStatus, 15000);
+
+    // ===== INIT =====
+    document.addEventListener('DOMContentLoaded', () => {
+      loadChatHistory();
+      checkStatus();
+    });
+  </script>
+</body>
+</html>
